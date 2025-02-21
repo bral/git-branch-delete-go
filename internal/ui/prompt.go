@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"git-branch-delete/internal/git"
+	"github.com/bral/git-branch-delete-go/internal/git"
 
 	"github.com/fatih/color"
 	"github.com/manifoldco/promptui"

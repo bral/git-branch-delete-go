@@ -1,4 +1,4 @@
-module git-branch-delete
+module github.com/bral/git-branch-delete-go
 
 go 1.21
 

@@ -4,8 +4,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"git-branch-delete/internal/git"
-	"git-branch-delete/internal/ui"
+	"github.com/bral/git-branch-delete-go/internal/git"
+	"github.com/bral/git-branch-delete-go/internal/ui"
 
 	"github.com/fatih/color"
 )
