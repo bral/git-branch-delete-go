@@ -18,7 +18,7 @@ A command-line tool written in Go for interactively deleting Git branches. This 
 To install globally:
 
 ```bash
-go install github.com/brannonlucas/git-branch-delete-go/cmd/git-branch-delete@latest
+go install github.com/bral/git-branch-delete-go/cmd/git-branch-delete@latest
 ```
 
 Or build from source:
