@@ -13,15 +13,24 @@ import (
 )
 
 type branchItem struct {
-	Name      string
+	Name       string
 	CommitHash string
 	Message    string
 	IsCurrent  bool
 	IsMerged   bool
 	Selected   bool
+	IsSpecial  bool // For special options like "Delete All But Current"
 }
 
 func (b branchItem) String() string {
+	if b.IsSpecial {
+		check := " "
+		if b.Selected {
+			check = "✓"
+		}
+		return fmt.Sprintf("[%s] \033[1;33m%s\033[0m", check, b.Name)
+	}
+
 	check := " "
 	if b.Selected {
 		check = "✓"
@@ -72,9 +81,17 @@ func SelectBranches(branches []git.Branch) ([]string, error) {
 		return nil, fmt.Errorf("no branches available for deletion")
 	}
 
-	items := make([]branchItem, len(others))
+	// Create items list with special "Delete All But Current" option
+	items := make([]branchItem, len(others)+1)
+	items[0] = branchItem{
+		Name:      "Delete All But Current Branch",
+		IsSpecial: true,
+		Selected:  false,
+	}
+
+	// Add regular branch items
 	for i, b := range others {
-		items[i] = branchItem{
+		items[i+1] = branchItem{
 			Name:       b.Name,
 			CommitHash: b.CommitHash,
 			Message:    b.Message,
@@ -91,26 +108,62 @@ func SelectBranches(branches []git.Branch) ([]string, error) {
 	fmt.Print("SPACE to select/unselect, ENTER to confirm\r\n")
 	fmt.Print("Press Ctrl+C to exit without deleting\r\n\r\n")
 
-	// Save the position after the prompt
-	promptHeight := 4 // Current branch + blank line + 3 lines of instructions
-	if current != nil {
-		promptHeight += 2 // Add current branch line + its blank line
+	// Get terminal height
+	_, height, err := term.GetSize(int(os.Stdin.Fd()))
+	if err != nil {
+		return nil, fmt.Errorf("could not get terminal size: %v", err)
 	}
 
+	// Calculate visible items
+	headerHeight := 4 // Basic prompt height
+	if current != nil {
+		headerHeight += 2 // Add current branch height
+	}
+	visibleItems := height - headerHeight - 1 // -1 for prompt at bottom
+	if visibleItems < 1 {
+		visibleItems = 1
+	}
+
+	// Track scroll position
+	scrollPos := 0
+
 	for {
-		// Clear items area only (leave prompt intact)
-		if current != nil {
-			fmt.Print("\033[" + fmt.Sprint(promptHeight) + ";1H") // Move to start of items
-			fmt.Print("\033[J")                                   // Clear from cursor to end
+		// Calculate visible range
+		start := scrollPos
+		end := scrollPos + visibleItems
+		if end > len(items) {
+			end = len(items)
+			start = end - visibleItems
+			if start < 0 {
+				start = 0
+			}
 		}
 
-		// Draw items
+		// Clear items area only (leave prompt intact)
+		fmt.Print("\033[" + fmt.Sprint(headerHeight) + ";1H") // Move to start of items
+		fmt.Print("\033[J")                                   // Clear from cursor to end
+
+		// Draw visible items
 		var buf strings.Builder
-		for i, item := range items {
+		for i := start; i < end; i++ {
+			item := items[i]
 			if item.Selected {
 				buf.WriteString("\033[32m✓\033[0m ") // Green checkmark for selected
 			} else {
 				buf.WriteString("\033[90m✓\033[0m ") // Gray checkmark for unselected
+			}
+
+			if item.IsSpecial {
+				if i == currentIndex {
+					buf.WriteString(fmt.Sprintf("\033[4;33m%s\033[0m\r\n", item.Name)) // Underlined yellow
+					// Add separator after special option
+					buf.WriteString("\033[90m" + strings.Repeat("─", 50) + "\033[0m\r\n")
+				} else {
+					buf.WriteString(fmt.Sprintf("\033[33m%s\033[0m\r\n", item.Name)) // Yellow
+					// Add separator after special option
+					buf.WriteString("\033[90m" + strings.Repeat("─", 50) + "\033[0m\r\n")
+				}
+				continue
 			}
 
 			// Format branch info
@@ -166,7 +219,7 @@ func SelectBranches(branches []git.Branch) ([]string, error) {
 		case n == 1 && b[0] == 13: // Enter
 			// Collect selected items
 			for _, item := range items {
-				if item.Selected {
+				if item.Selected && !item.IsSpecial {
 					selected = append(selected, item.Name)
 				}
 			}
@@ -174,8 +227,20 @@ func SelectBranches(branches []git.Branch) ([]string, error) {
 			fmt.Print("\r\n")
 			return selected, nil
 		case n == 1 && b[0] == 32: // Space
-			// Toggle selection of current item
-			items[currentIndex].Selected = !items[currentIndex].Selected
+			if currentIndex == 0 { // Special "Delete All But Current" option
+				// Toggle all items except current branch
+				items[0].Selected = !items[0].Selected
+				for i := 1; i < len(items); i++ {
+					items[i].Selected = items[0].Selected
+				}
+			} else {
+				// Toggle selection of current item
+				items[currentIndex].Selected = !items[currentIndex].Selected
+				// If any regular item is deselected, deselect the "Delete All" option
+				if !items[currentIndex].Selected {
+					items[0].Selected = false
+				}
+			}
 		case n == 1 && b[0] == 14: // Ctrl+N (next)
 			if currentIndex < len(items)-1 {
 				currentIndex++
@@ -189,10 +254,18 @@ func SelectBranches(branches []git.Branch) ([]string, error) {
 			case 65: // Up arrow (27,91,65)
 				if currentIndex > 0 {
 					currentIndex--
+					// Adjust scroll position if needed
+					if currentIndex < scrollPos {
+						scrollPos = currentIndex
+					}
 				}
 			case 66: // Down arrow (27,91,66)
 				if currentIndex < len(items)-1 {
 					currentIndex++
+					// Adjust scroll position if needed
+					if currentIndex >= scrollPos+visibleItems {
+						scrollPos = currentIndex - visibleItems + 1
+					}
 				}
 			}
 		}
