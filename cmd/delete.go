@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/bral/git-branch-delete-go/internal/git"
 	"github.com/bral/git-branch-delete-go/internal/log"
+	"github.com/bral/git-branch-delete-go/pkg/git"
 	"github.com/spf13/cobra"
 )
 
@@ -48,16 +48,12 @@ func runDelete(cmd *cobra.Command, args []string) error {
 	// Get current directory
 	dir, err := os.Getwd()
 	if err != nil {
-		log.Error("Failed to get current directory", "error", err)
+		log.Error("Failed to get current directory: %v", err)
 		return err
 	}
 
 	// Initialize git client
-	gitClient, err := git.New(dir)
-	if err != nil {
-		log.Error("Failed to initialize git client", "error", err)
-		return err
-	}
+	gitClient := git.New(dir)
 
 	// Check if branch is protected
 	for _, protected := range cfg.ProtectedBranches {
@@ -71,15 +67,15 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to delete branch: %w", err)
 	}
 
-	log.Info("Successfully deleted branch:", branchName)
+	log.Info("Successfully deleted branch: %s", branchName)
 
 	// If --all flag is set, also delete remote branch
 	if all && !remote {
-		log.Info("Deleting remote branch:", branchName)
+		log.Info("Deleting remote branch: %s", branchName)
 		if err := gitClient.DeleteBranch(branchName, force, true); err != nil {
 			return fmt.Errorf("failed to delete remote branch: %w", err)
 		}
-		log.Info("Successfully deleted remote branch:", branchName)
+		log.Info("Successfully deleted remote branch: %s", branchName)
 	}
 
 	return nil

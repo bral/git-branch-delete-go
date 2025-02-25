@@ -6,8 +6,8 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/bral/git-branch-delete-go/internal/git"
 	"github.com/bral/git-branch-delete-go/internal/log"
+	"github.com/bral/git-branch-delete-go/pkg/git"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
@@ -44,28 +44,22 @@ func runList(cmd *cobra.Command, args []string) error {
 	// Get current directory
 	dir, err := os.Getwd()
 	if err != nil {
-		log.Error("Failed to get current directory", "error", err)
+		log.Error("Failed to get current directory: %v", err)
 		return err
 	}
 
 	// Initialize git client
-	gitClient, err := git.New(dir)
-	if err != nil {
-		log.Error("Failed to initialize git client", "error", err)
-		return err
-	}
-
-	// Get branches
+	gitClient := git.New(dir)
 	branches, err := gitClient.ListBranches()
 	if err != nil {
-		log.Error("Failed to list branches", "error", err)
+		log.Error("Failed to list branches: %v", err)
 		return err
 	}
 
-	log.Debug("Retrieved branches", "count", len(branches))
+	log.Debug("Retrieved branches: %d total", len(branches))
 
 	// Filter branches based on flags
-	var filteredBranches []git.GitBranch
+	var filteredBranches []git.Branch
 	for _, branch := range branches {
 		if showAll ||
 		   (showRemote && branch.IsRemote) ||
@@ -74,7 +68,7 @@ func runList(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	log.Debug("Filtered branches", "count", len(filteredBranches))
+	log.Debug("Filtered branches: %d total", len(filteredBranches))
 
 	if len(filteredBranches) == 0 {
 		log.Info("No branches found matching criteria")
@@ -115,7 +109,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	}
 
 	if err := w.Flush(); err != nil {
-		log.Error("Failed to flush output", "error", err)
+		log.Error("Failed to flush output: %v", err)
 		return err
 	}
 

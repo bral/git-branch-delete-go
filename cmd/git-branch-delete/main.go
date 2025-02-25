@@ -4,34 +4,36 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/bral/git-branch-delete-go/internal/git"
 	"github.com/bral/git-branch-delete-go/internal/ui"
+	"github.com/bral/git-branch-delete-go/pkg/git"
 
 	"github.com/fatih/color"
 )
 
-func findGitRoot() bool {
+func findGitRoot() (string, bool) {
 	dir, err := os.Getwd()
 	if err != nil {
-		return false
+		return "", false
 	}
 
 	for dir != "/" {
 		if _, err := os.Stat(filepath.Join(dir, ".git")); !os.IsNotExist(err) {
-			return true
+			return dir, true
 		}
 		dir = filepath.Dir(dir)
 	}
-	return false
+	return "", false
 }
 
 func main() {
-	if !findGitRoot() {
+	gitDir, isGitRepo := findGitRoot()
+	if !isGitRepo {
 		color.Blue("Not a Git repository. Please navigate to a directory with a .git folder.")
 		os.Exit(1)
 	}
 
-	branches, err := git.GetBranches()
+	gitClient := git.New(gitDir)
+	branches, err := gitClient.ListBranches()
 	if err != nil {
 		color.Red("Error getting branches: %v", err)
 		os.Exit(1)
@@ -73,21 +75,20 @@ func main() {
 	}
 
 	// Delete branches and show results
-	results := git.DeleteBranches(selectedBranches)
-
 	successCount := 0
-	for _, result := range results {
-		if result.Success {
-			color.Green("✓ Deleted branch %s", result.Name)
-			successCount++
+	for _, branchName := range selectedBranches {
+		err := gitClient.DeleteBranch(branchName, true, false)
+		if err != nil {
+			color.Red("✗ Failed to delete %s: %s", branchName, err)
 		} else {
-			color.Red("✗ Failed to delete %s: %s", result.Name, result.Error)
+			color.Green("✓ Deleted branch %s", branchName)
+			successCount++
 		}
 	}
 
-	if successCount == len(results) {
-		color.Green("\nSuccessfully deleted all %d branch(es).", len(results))
+	if successCount == len(selectedBranches) {
+		color.Green("\nSuccessfully deleted all %d branch(es).", len(selectedBranches))
 	} else {
-		color.Yellow("\nDeleted %d out of %d branch(es).", successCount, len(results))
+		color.Yellow("\nDeleted %d out of %d branch(es).", successCount, len(selectedBranches))
 	}
 }

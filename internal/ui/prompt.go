@@ -35,7 +35,7 @@ func (b branchItem) String() string {
 	if b.Selected {
 		check = "✓"
 	}
-	return fmt.Sprintf("[%s] %s [%s] %s (%s)", check, b.Name, b.CommitHash, b.Message, b.IsMerged)
+	return fmt.Sprintf("[%s] %s [%s] %s (%v)", check, b.Name, b.CommitHash, b.Message, b.IsMerged)
 }
 
 // SelectBranches presents an interactive prompt for selecting branches to delete

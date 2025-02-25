@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -44,15 +43,17 @@ func setupTestRepo(t *testing.T) (string, func()) {
 
 func TestNew(t *testing.T) {
 	dir := "/test/dir"
-	g := New(dir)
-	assert.Equal(t, dir, g.workDir)
+	g, err := New(dir)
+	require.Error(t, err) // Should error since /test/dir doesn't exist
+	assert.Nil(t, g)
 }
 
 func TestListBranches(t *testing.T) {
 	dir, cleanup := setupTestRepo(t)
 	defer cleanup()
 
-	g := New(dir)
+	g, err := New(dir)
+	require.NoError(t, err)
 	branches, err := g.ListBranches()
 	require.NoError(t, err)
 
@@ -77,33 +78,15 @@ func TestListBranches(t *testing.T) {
 	assert.True(t, hasFeature2)
 }
 
-func TestVerifyRepo(t *testing.T) {
-	// Test valid repo
-	dir, cleanup := setupTestRepo(t)
-	defer cleanup()
-
-	g := New(dir)
-	err := g.verifyRepo()
-	assert.NoError(t, err)
-
-	// Test invalid repo
-	invalidDir := filepath.Join(dir, "not-a-repo")
-	require.NoError(t, os.Mkdir(invalidDir, 0755))
-
-	g = New(invalidDir)
-	err = g.verifyRepo()
-	assert.Error(t, err)
-	assert.IsType(t, &ErrNotGitRepo{}, err)
-}
-
 func TestDeleteBranch(t *testing.T) {
 	dir, cleanup := setupTestRepo(t)
 	defer cleanup()
 
-	g := New(dir)
+	g, err := New(dir)
+	require.NoError(t, err)
 
 	// Try deleting a branch
-	err := g.DeleteBranch("feature/test", false, false)
+	err = g.DeleteBranch("feature/test", false, false)
 	require.NoError(t, err)
 
 	// Verify branch is gone
@@ -119,7 +102,8 @@ func TestDeleteBranchErrors(t *testing.T) {
 	dir, cleanup := setupTestRepo(t)
 	defer cleanup()
 
-	g := New(dir)
+	g, err := New(dir)
+	require.NoError(t, err)
 
 	tests := []struct {
 		name        string
@@ -190,7 +174,8 @@ func BenchmarkListBranches(b *testing.B) {
 	dir, cleanup := setupBenchmarkRepo(b)
 	defer cleanup()
 
-	g := New(dir)
+	g, err := New(dir)
+	require.NoError(b, err)
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
@@ -200,66 +185,16 @@ func BenchmarkListBranches(b *testing.B) {
 	}
 }
 
-func BenchmarkGetCurrentBranch(b *testing.B) {
-	dir, cleanup := setupBenchmarkRepo(b)
-	defer cleanup()
-
-	g := New(dir)
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		branch, err := g.getCurrentBranch()
-		require.NoError(b, err)
-		require.NotEmpty(b, branch)
-	}
-}
-
-func BenchmarkGetDefaultBranch(b *testing.B) {
-	dir, cleanup := setupBenchmarkRepo(b)
-	defer cleanup()
-
-	g := New(dir)
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		branch, err := g.getDefaultBranch()
-		require.NoError(b, err)
-		require.NotEmpty(b, branch)
-	}
-}
-
-func BenchmarkMarkStaleBranches(b *testing.B) {
-	dir, cleanup := setupBenchmarkRepo(b)
-	defer cleanup()
-
-	g := New(dir)
-	branches, err := g.ListBranches()
-	require.NoError(b, err)
-
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		err := g.markStaleBranches(branches)
-		require.NoError(b, err)
-	}
-}
-
 func BenchmarkDeleteBranch(b *testing.B) {
 	dir, cleanup := setupBenchmarkRepo(b)
 	defer cleanup()
 
-	g := New(dir)
+	g, err := New(dir)
+	require.NoError(b, err)
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		// Create a new branch for each iteration
-		branchName := fmt.Sprintf("bench-branch-%d", i)
-		cmd := exec.Command("git", "branch", branchName)
-		cmd.Dir = dir
-		require.NoError(b, cmd.Run())
-		b.StartTimer()
-
+		branchName := fmt.Sprintf("feature/test-%d", i%100)
 		err := g.DeleteBranch(branchName, true, false)
 		require.NoError(b, err)
 	}

@@ -42,6 +42,6 @@ func initConfig() {
 	var err error
 	cfg, err = config.Load()
 	if err != nil {
-		log.Fatal("Error loading config:", err)
+		log.Fatal("Error loading config: %v", err)
 	}
 }
