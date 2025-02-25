@@ -9,33 +9,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Initial release with core functionality
-- List command for viewing branches
-- Delete command for removing branches
-- Interactive mode for multi-branch operations
-- Prune command for cleaning up stale branches
-- Shell completion support
-- Configuration file support
-- Protected branches feature
-- Remote branch handling with authentication
-- Color-coded output
-- Dry-run mode
+- Simple UI implementation for branch selection and deletion confirmation
+- Interactive command with force and all flags
+- Comprehensive test suite for all components
+- Error handling for Git operations
+- Support for local branch operations
 
 ### Changed
 
-- None
-
-### Deprecated
-
-- None
-
-### Removed
-
-- None
+- Moved Git package from internal to pkg directory
+- Improved error messages and user feedback
+- Enhanced test coverage and organization
 
 ### Fixed
 
-- None
+- Command test initialization
+- Git client error handling
+- Branch type consistency
+
+## [1.0.0] - YYYY-MM-DD
+
+### Added
+
+- Initial release
+- Basic branch deletion functionality
+- Command-line interface
+- Git operations wrapper
+- Error handling
+- Test suite
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
 
 ### Security
 

@@ -2,23 +2,20 @@ linters:
   enable:
     - gofmt
     - govet
-    - golint
-    - gosimple
-    - staticcheck
     - errcheck
+    - staticcheck
+    - gosimple
     - ineffassign
-    - unconvert
-    - misspell
+    - typecheck
     - gocritic
-
-run:
-  deadline: 5m
-
-issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - errcheck
+    - revive
+    - gocyclo
+    - nakedret
+    - misspell
+    - prealloc
+    - unconvert
+    - unparam
+    - whitespace
 
 linters-settings:
   gocritic:
@@ -26,12 +23,26 @@ linters-settings:
       - diagnostic
       - style
       - performance
+      - experimental
+      - opinionated
+  gocyclo:
+    min-complexity: 15
+  nakedret:
+    max-func-lines: 30
 
-  errcheck:
-    check-type-assertions: true
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+    - path: cmd/
+      linters:
+        - gocyclo
+  max-issues-per-linter: 0
+  max-same-issues: 0
 
-  govet:
-    check-shadowing: true
-
-  golint:
-    min-confidence: 0.8
+run:
+  timeout: 5m

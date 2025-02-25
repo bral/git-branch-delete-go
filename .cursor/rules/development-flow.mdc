@@ -1,0 +1,309 @@
+# Development Flow
+
+This rule defines the development workflow for this project, ensuring consistent quality and maintainable code.
+
+## Development Lifecycle
+
+### 1. Feature Planning
+- Create a feature branch from `main`
+  ```bash
+  git checkout -b feat/feature-name
+  ```
+- Branch naming:
+  - `feat/*` - New features
+  - `fix/*` - Bug fixes
+  - `refactor/*` - Code refactoring
+  - `test/*` - Test improvements
+  - `docs/*` - Documentation
+  - `chore/*` - Maintenance tasks
+
+### 2. Test-Driven Development (TDD)
+1. Write failing tests first
+2. Implement minimal code to pass tests
+3. Refactor while keeping tests green
+
+#### Test Structure
+```go
+func TestFeature(t *testing.T) {
+    tests := []struct {
+        name     string
+        input    Type
+        want     Type
+        wantErr  bool
+        errType  error
+    }{
+        {
+            name:    "happy path",
+            input:   validInput,
+            want:    expectedOutput,
+            wantErr: false,
+        },
+        {
+            name:    "error case",
+            input:   invalidInput,
+            wantErr: true,
+            errType: &CustomError{},
+        },
+    }
+
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            // Test implementation
+        })
+    }
+}
+```
+
+### 3. Code Implementation
+1. Follow Go best practices and project conventions
+2. Keep functions small and focused
+3. Use meaningful variable names
+4. Add comments for complex logic
+5. Implement proper error handling
+6. Follow interface segregation principle
+
+#### Code Structure
+```go
+// Package comment describing the package's purpose
+package example
+
+// Imports grouped by standard lib, external, internal
+import (
+    "context"
+    "fmt"
+
+    "github.com/spf13/cobra"
+
+    "github.com/bral/git-branch-delete-go/internal/config"
+)
+
+// Interface definitions first
+type Interface interface {
+    Method() error
+}
+
+// Followed by implementations
+type implementation struct {
+    config *config.Config
+}
+
+// Constructor function
+func New(cfg *config.Config) Interface {
+    return &implementation{
+        config: cfg,
+    }
+}
+
+// Methods with clear documentation
+func (i *implementation) Method() error {
+    // Implementation
+}
+```
+
+### 4. Testing Process
+1. Unit Tests
+   - Test each function in isolation
+   - Mock external dependencies
+   - Test error conditions
+   - Test edge cases
+
+2. Integration Tests
+   - Test component interactions
+   - Use test fixtures
+   - Test real-world scenarios
+
+3. Test Coverage
+   ```bash
+   go test -v -race -coverprofile=coverage.out ./...
+   go tool cover -html=coverage.out
+   ```
+
+### 5. Documentation
+1. Update README.md with new features
+2. Add/update godoc comments
+3. Update examples if needed
+4. Update CLI help text
+5. Add/update configuration documentation
+
+### 6. Version Management
+1. Follow semantic versioning (MAJOR.MINOR.PATCH)
+2. Update version in:
+   - version.go
+   - README.md
+   - go.mod
+
+```go
+// version.go
+package cmd
+
+var (
+    Version   = "x.y.z"
+    BuildTime = "yyyy-mm-dd"
+    GitCommit = "abcdef"
+)
+```
+
+### 7. Pre-Commit Checks
+```bash
+# Format code
+go fmt ./...
+
+# Run linter
+golangci-lint run
+
+# Run tests
+go test -v -race ./...
+
+# Build binary
+go build -v -o bin/git-branch-delete
+```
+
+### 8. Commit Guidelines
+Follow conventional commits:
+
+```
+<type>(<scope>): <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+Types:
+- feat: New feature
+- fix: Bug fix
+- docs: Documentation
+- style: Formatting
+- refactor: Code restructuring
+- test: Adding tests
+- chore: Maintenance
+
+### 9. Code Review Process
+1. Self-review checklist:
+   - [ ] Tests pass
+   - [ ] Documentation updated
+   - [ ] No linter errors
+   - [ ] Proper error handling
+   - [ ] Clean commit history
+   - [ ] Version updated if needed
+
+2. Peer review guidelines:
+   - Code correctness
+   - Test coverage
+   - Error handling
+   - Documentation
+   - Performance considerations
+   - Security implications
+
+### 10. Release Process
+1. Update CHANGELOG.md
+2. Tag release
+   ```bash
+   git tag -a v1.2.3 -m "Release v1.2.3"
+   git push origin v1.2.3
+   ```
+3. Create GitHub release
+4. Build and publish binaries
+
+## Development Commands
+
+### Setup Development Environment
+```bash
+make setup
+```
+
+### Run Tests
+```bash
+# Run all tests
+make test
+
+# Run specific test
+go test -v ./pkg/git -run TestSpecific
+
+# Run tests with race detection
+make test-race
+```
+
+### Build
+```bash
+# Development build
+make build
+
+# Release build
+make release
+```
+
+### Lint
+```bash
+# Run linter
+make lint
+
+# Fix auto-fixable issues
+make lint-fix
+```
+
+### Generate Mocks
+```bash
+# Generate mocks for interfaces
+make generate-mocks
+```
+
+## Error Handling Patterns
+
+### Custom Errors
+```go
+type CustomError struct {
+    Msg string
+    Err error
+}
+
+func (e *CustomError) Error() string {
+    if e.Err != nil {
+        return fmt.Sprintf("%s: %v", e.Msg, e.Err)
+    }
+    return e.Msg
+}
+
+func (e *CustomError) Unwrap() error {
+    return e.Err
+}
+```
+
+### Error Wrapping
+```go
+if err != nil {
+    return fmt.Errorf("operation failed: %w", err)
+}
+```
+
+## Performance Considerations
+
+1. Use buffered I/O for file operations
+2. Implement proper timeouts
+3. Use goroutines appropriately
+4. Profile CPU and memory usage
+5. Benchmark critical paths
+
+## Security Guidelines
+
+1. Validate all user inputs
+2. Use secure random when needed
+3. Handle sensitive data appropriately
+4. Follow OWASP guidelines
+5. Regular dependency updates
+
+## Monitoring and Debugging
+
+1. Structured logging
+2. Error tracking
+3. Performance metrics
+4. Debug flags
+5. Trace information
+
+## Continuous Integration
+
+1. GitHub Actions workflow
+2. Automated tests
+3. Linting checks
+4. Security scanning
+5. Release automation 

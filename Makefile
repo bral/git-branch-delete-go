@@ -1,88 +1,62 @@
-.PHONY: all build test clean install deps lint release snapshot
+.PHONY: all setup build test test-race test-cover lint lint-fix clean generate-mocks release
 
+# Variables
 BINARY_NAME=git-branch-delete
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-COMMIT_SHA ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-BUILD_TIME ?= $(shell date -u '+%Y-%m-%d_%H:%M:%S')
-LDFLAGS=-ldflags "-s -w -X github.com/bral/git-branch-delete-go/cmd.Version=${VERSION} -X github.com/bral/git-branch-delete-go/cmd.CommitSHA=${COMMIT_SHA} -X github.com/bral/git-branch-delete-go/cmd.BuildTime=${BUILD_TIME}"
+VERSION=$(shell git describe --tags --always --dirty)
+BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
+COMMIT_HASH=$(shell git rev-parse --short HEAD)
+LDFLAGS=-ldflags "-X github.com/bral/git-branch-delete-go/cmd.Version=${VERSION} -X github.com/bral/git-branch-delete-go/cmd.BuildTime=${BUILD_TIME} -X github.com/bral/git-branch-delete-go/cmd.GitCommit=${COMMIT_HASH}"
 
-# Default target
-all: deps build test
+all: setup test lint build
 
-# Install dependencies
-deps:
-	@echo "Installing dependencies..."
+setup:
+	@echo "Installing development dependencies..."
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	go install github.com/golang/mock/mockgen@latest
 	go mod download
 	go mod tidy
 
-# Build the binary
-build: deps
-	@echo "Building ${BINARY_NAME} version ${VERSION}..."
-	mkdir -p bin
-	CGO_ENABLED=0 go build ${LDFLAGS} -o bin/${BINARY_NAME}
+build:
+	@echo "Building ${BINARY_NAME}..."
+	go build ${LDFLAGS} -o bin/${BINARY_NAME}
 
-# Run tests
-test: deps
+test:
 	@echo "Running tests..."
 	go test -v ./...
 
-# Run tests with coverage
-test-coverage:
+test-race:
+	@echo "Running tests with race detection..."
+	go test -v -race ./...
+
+test-cover:
 	@echo "Running tests with coverage..."
-	go test -v -coverprofile=coverage.out ./...
+	go test -v -race -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
 
-# Run linter
 lint:
 	@echo "Running linter..."
 	golangci-lint run
 
-# Clean build artifacts
+lint-fix:
+	@echo "Running linter with auto-fix..."
+	golangci-lint run --fix
+
+generate-mocks:
+	@echo "Generating mocks..."
+	mockgen -source=pkg/git/git.go -destination=test/mocks/mock_git.go
+	mockgen -source=internal/ui/ui.go -destination=test/mocks/mock_ui.go
+
 clean:
-	@echo "Cleaning..."
+	@echo "Cleaning up..."
 	rm -rf bin/
 	rm -f coverage.out coverage.html
 	go clean -testcache
 
-# Install to $GOPATH/bin
-install: build
-	@echo "Installing to ${GOPATH}/bin..."
-	mv bin/${BINARY_NAME} ${GOPATH}/bin/${BINARY_NAME}
-
-# Create a new release
 release:
-	@echo "Creating release ${VERSION}..."
-	goreleaser release --clean
-
-# Create a snapshot release
-snapshot:
-	@echo "Creating snapshot..."
-	goreleaser release --snapshot --clean
-
-# Run the program
-run: build
-	@echo "Running ${BINARY_NAME}..."
-	./bin/${BINARY_NAME}
-
-# Show version info
-version:
-	@echo "Version: ${VERSION}"
-	@echo "Commit: ${COMMIT_SHA}"
-	@echo "Build Time: ${BUILD_TIME}"
-
-# Help target
-help:
-	@echo "Available targets:"
-	@echo "  all           - Install dependencies, build, and test"
-	@echo "  deps          - Install dependencies"
-	@echo "  build         - Build the binary"
-	@echo "  test          - Run tests"
-	@echo "  test-coverage - Run tests with coverage"
-	@echo "  lint          - Run linter"
-	@echo "  clean         - Clean build artifacts"
-	@echo "  install       - Install to GOPATH/bin"
-	@echo "  release       - Create a new release"
-	@echo "  snapshot      - Create a snapshot release"
-	@echo "  run           - Run the program"
-	@echo "  version       - Show version info"
-	@echo "  help          - Show this help"
+	@echo "Building release version..."
+	GOOS=darwin GOARCH=amd64 go build ${LDFLAGS} -o bin/${BINARY_NAME}_darwin_amd64
+	GOOS=darwin GOARCH=arm64 go build ${LDFLAGS} -o bin/${BINARY_NAME}_darwin_arm64
+	GOOS=linux GOARCH=amd64 go build ${LDFLAGS} -o bin/${BINARY_NAME}_linux_amd64
+	GOOS=windows GOARCH=amd64 go build ${LDFLAGS} -o bin/${BINARY_NAME}_windows_amd64.exe
+	@echo "Creating checksums..."
+	cd bin && sha256sum ${BINARY_NAME}* > checksums.txt
