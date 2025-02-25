@@ -1,78 +1,160 @@
-# Git Branch Delete (Go Version)
+# git-branch-delete
 
-A command-line tool written in Go for interactively deleting Git branches. This is a Go implementation of the original TypeScript tool.
+A powerful CLI tool for managing Git branches with features for safe deletion, interactive selection, and branch cleanup.
 
 ## Features
 
-- Interactive branch selection with colored output
-- Shows detailed branch information:
-  - Commit hash
-  - Last commit message
-  - Merge status (green if merged, red if not)
-- Safe deletion with confirmation
-- Prevents deletion of current branch
-- Vim-style navigation (Ctrl+N, Ctrl+P)
+- 🔍 List local and remote branches with detailed status
+- 🗑️ Safely delete branches with protection for default branches
+- 🤝 Interactive mode for selecting multiple branches
+- 🧹 Prune stale and merged branches
+- 🎨 Color-coded output for better visibility
+- 🔒 Protected branches configuration
+- 🔄 Remote branch handling
+- 🚦 Dry-run mode for safety
 
 ## Installation
 
-To install globally:
+### Using Go
 
 ```bash
-go install github.com/bral/git-branch-delete-go/cmd/git-branch-delete@latest
+go install github.com/bral/git-branch-delete-go@latest
 ```
 
-Or build from source:
+### Using Homebrew
 
 ```bash
-git clone https://github.com/brannonlucas/git-branch-delete-go.git
-cd git-branch-delete-go
-go build ./cmd/git-branch-delete
+brew install brannonlucas/tap/git-branch-delete
 ```
 
-After building from source, you can:
+### From Release
 
-1. Run it directly: `./git-branch-delete`
-2. Move it to your PATH: `mv git-branch-delete /usr/local/bin/`
+Download the latest release from the [releases page](https://github.com/bral/git-branch-delete-go/releases).
 
 ## Usage
 
-1. Navigate to a Git repository
-2. Run `git-branch-delete`
-3. Use arrow keys or Ctrl+N/P to navigate branches
-4. Press space to select branches for deletion
-5. Press enter to confirm selection
-6. Type 'y' to confirm deletion
+### List Branches
 
-## Key Bindings
+```bash
+# List local branches
+git-branch-delete list
 
-- ↑/↓: Navigate through branches
-- Ctrl+N: Next branch
-- Ctrl+P: Previous branch
-- Space: Select/deselect branch
-- Enter: Confirm selection
-- Ctrl+C: Exit without deleting
+# List remote branches
+git-branch-delete list --remote
 
-## Branch Display Format
-
-Branches are displayed in the following format:
-
-```
-branch-name [a1b2c3d] Commit message... (merged)     # in green if merged
-other-branch [e4f5g6h] WIP: New feature... (not merged)  # in red if not merged
+# List all branches
+git-branch-delete list --all
 ```
 
-- Branch name
-- Commit hash in square brackets
-- Truncated commit message (max 30 chars)
-- Merge status in parentheses (colored)
+### Interactive Mode
 
-## Requirements
+```bash
+# Select branches to delete interactively
+git-branch-delete interactive
+# or use the shorthand
+git-branch-delete i
+```
 
-- Go 1.21 or higher
-- Git installed and accessible in PATH
+### Prune Stale Branches
 
-## Dependencies
+```bash
+# Show stale branches
+git-branch-delete prune --dry-run
 
-- github.com/fatih/color: Terminal color output
-- github.com/manifoldco/promptui: Interactive terminal prompts
-- golang.org/x/term: Terminal utilities
+# Delete stale branches (with confirmation)
+git-branch-delete prune
+
+# Force delete stale branches
+git-branch-delete prune --force
+```
+
+### Configuration
+
+Create `~/.config/git-branch-delete.yaml`:
+
+```yaml
+# Override default branch detection
+default_branch: main
+
+# Protect specific branches from deletion
+protected_branches:
+  - main
+  - master
+  - develop
+
+# Default remote (default: origin)
+default_remote: origin
+
+# Skip confirmation prompts
+auto_confirm: false
+
+# Show what would be deleted without actually deleting
+dry_run: false
+```
+
+Environment variables are also supported:
+
+- `GBD_DEFAULT_BRANCH`
+- `GBD_DEFAULT_REMOTE`
+- `GBD_AUTO_CONFIRM`
+- `GBD_DRY_RUN`
+
+### Shell Completion
+
+```bash
+# Bash
+source <(git-branch-delete completion bash)
+
+# Zsh
+source <(git-branch-delete completion zsh)
+
+# Fish
+git-branch-delete completion fish | source
+
+# PowerShell
+git-branch-delete completion powershell | Out-String | Invoke-Expression
+```
+
+## Development
+
+### Requirements
+
+- Go 1.22 or later
+- Make
+
+### Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/bral/git-branch-delete-go.git
+cd git-branch-delete-go
+
+# Install dependencies
+make deps
+
+# Build
+make build
+
+# Run tests
+make test
+```
+
+### Commands
+
+- `make build` - Build the binary
+- `make test` - Run tests
+- `make clean` - Clean build artifacts
+- `make install` - Install to $GOPATH/bin
+- `make deps` - Install dependencies
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -am 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+
+MIT License - see LICENSE file
