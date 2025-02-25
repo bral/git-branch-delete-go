@@ -10,15 +10,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupTestRepo(t *testing.T) (string, func()) {
-	t.Helper()
+func setupTestRepo(t *testing.T) (dir string, cleanup func()) {
+	// Create a temporary directory
+	tmpDir, err := os.MkdirTemp("", "git-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
 
-	// Create temp directory
-	dir, err := os.MkdirTemp("", "git-test-*")
-	require.NoError(t, err)
-
-	cleanup := func() {
-		os.RemoveAll(dir)
+	cleanup = func() {
+		os.RemoveAll(tmpDir)
 	}
 
 	// Initialize git repo
@@ -33,7 +33,7 @@ func setupTestRepo(t *testing.T) (string, func()) {
 	// Run initial commands
 	for _, cmd := range cmds {
 		c := exec.Command(cmd[0], cmd[1:]...)
-		c.Dir = dir
+		c.Dir = tmpDir
 		c.Env = append(os.Environ(),
 			"GIT_CONFIG_GLOBAL=/dev/null",
 			"GIT_CONFIG_SYSTEM=/dev/null",
@@ -56,7 +56,7 @@ func setupTestRepo(t *testing.T) (string, func()) {
 
 	for _, cmd := range branchCmds {
 		c := exec.Command(cmd[0], cmd[1:]...)
-		c.Dir = dir
+		c.Dir = tmpDir
 		c.Env = append(os.Environ(),
 			"GIT_CONFIG_GLOBAL=/dev/null",
 			"GIT_CONFIG_SYSTEM=/dev/null",
@@ -67,7 +67,7 @@ func setupTestRepo(t *testing.T) (string, func()) {
 		}
 	}
 
-	return dir, cleanup
+	return tmpDir, cleanup
 }
 
 func TestNew(t *testing.T) {
@@ -165,13 +165,15 @@ func TestDeleteBranchErrors(t *testing.T) {
 	}
 }
 
-func setupBenchmarkRepo(b *testing.B) (string, func()) {
-	// Create temp directory
-	dir, err := os.MkdirTemp("", "git-bench-*")
-	require.NoError(b, err)
+func setupBenchmarkRepo(b *testing.B) (dir string, cleanup func()) {
+	// Create a temporary directory
+	tmpDir, err := os.MkdirTemp("", "git-bench-*")
+	if err != nil {
+		b.Fatalf("failed to create temp dir: %v", err)
+	}
 
-	cleanup := func() {
-		os.RemoveAll(dir)
+	cleanup = func() {
+		os.RemoveAll(tmpDir)
 	}
 
 	// Initialize git repo with many branches
@@ -184,18 +186,18 @@ func setupBenchmarkRepo(b *testing.B) (string, func()) {
 
 	for _, cmd := range cmds {
 		c := exec.Command(cmd[0], cmd[1:]...)
-		c.Dir = dir
+		c.Dir = tmpDir
 		require.NoError(b, c.Run())
 	}
 
 	// Create many branches
 	for i := 0; i < 100; i++ {
 		cmd := exec.Command("git", "branch", fmt.Sprintf("feature/test-%d", i))
-		cmd.Dir = dir
+		cmd.Dir = tmpDir
 		require.NoError(b, cmd.Run())
 	}
 
-	return dir, cleanup
+	return tmpDir, cleanup
 }
 
 func BenchmarkListBranches(b *testing.B) {

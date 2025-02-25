@@ -23,7 +23,7 @@ Shows a list of branches with their status and allows selecting multiple branche
 		Example: `  git-branch-delete interactive
   git-branch-delete interactive --force
   git-branch-delete interactive --all`,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			return nil // No-op for testing
 		},
 	}
@@ -129,7 +129,7 @@ Shows a list of branches with their status and allows selecting multiple branche
 	}
 }
 
-func TestInteractiveCmd(t *testing.T) {
+func TestInteractiveCommand(t *testing.T) {
 	// Skip execution tests since they require git repo and user interaction
 	t.Skip("Skipping execution tests since they require git repo and user interaction")
 }

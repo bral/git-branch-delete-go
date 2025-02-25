@@ -15,11 +15,6 @@ var (
 	// - Cannot contain: space, ~, ^, :, ?, *, [, \
 	// - Cannot end with '/'
 	// - Cannot end with '.lock'
-	// Using multiple regexes instead of negative lookahead
-	branchStartDotRegex = regexp.MustCompile(`^\.`)
-	doubleDotRegex      = regexp.MustCompile(`\.\.`)
-	endSlashRegex       = regexp.MustCompile(`/$`)
-	endLockRegex        = regexp.MustCompile(`\.lock$`)
 	// More restrictive valid chars regex
 	validCharsRegex = regexp.MustCompile(`^[a-zA-Z0-9][-a-zA-Z0-9/_]+$`)
 
@@ -88,11 +83,7 @@ var (
 		"../", "..\\", ".\\", "\\", "./../", "/..",
 	}
 
-	// More restrictive branch name pattern
-	// - Must start with alphanumeric
-	// - Can contain alphanumeric, dash, underscore, forward slash
-	// - Cannot end with slash or dot
-	// - Maximum length enforced separately
+	// branchNamePattern matches valid branch names
 	branchNamePattern = regexp.MustCompile(`^[a-zA-Z0-9][-a-zA-Z0-9/_]*[a-zA-Z0-9]$`)
 )
 

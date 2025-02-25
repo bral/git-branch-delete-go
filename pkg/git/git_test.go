@@ -10,15 +10,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupTestRepo(t *testing.T) (string, func()) {
+func setupTestRepo(t *testing.T) (dir string, cleanup func()) {
 	t.Helper()
 
-	// Create temp directory
-	dir, err := os.MkdirTemp("", "git-test-*")
-	require.NoError(t, err)
+	// Create a temporary directory
+	tmpDir, err := os.MkdirTemp("", "git-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
 
-	cleanup := func() {
-		os.RemoveAll(dir)
+	cleanup = func() {
+		os.RemoveAll(tmpDir)
 	}
 
 	// Initialize git repo
@@ -33,7 +35,7 @@ func setupTestRepo(t *testing.T) (string, func()) {
 	// Run initial commands
 	for _, cmd := range cmds {
 		c := exec.Command(cmd[0], cmd[1:]...)
-		c.Dir = dir
+		c.Dir = tmpDir
 		c.Env = append(os.Environ(),
 			"GIT_CONFIG_GLOBAL=/dev/null",
 			"GIT_CONFIG_SYSTEM=/dev/null",
@@ -60,7 +62,7 @@ func setupTestRepo(t *testing.T) (string, func()) {
 
 	for _, cmd := range branchCmds {
 		c := exec.Command(cmd[0], cmd[1:]...)
-		c.Dir = dir
+		c.Dir = tmpDir
 		c.Env = append(os.Environ(),
 			"GIT_CONFIG_GLOBAL=/dev/null",
 			"GIT_CONFIG_SYSTEM=/dev/null",
@@ -71,7 +73,7 @@ func setupTestRepo(t *testing.T) (string, func()) {
 		}
 	}
 
-	return dir, cleanup
+	return tmpDir, cleanup
 }
 
 func TestNew(t *testing.T) {

@@ -7,19 +7,6 @@ import (
 	"strings"
 )
 
-// Branch represents a git branch
-type Branch struct {
-	Name       string
-	CommitHash string
-	Message    string
-	IsLocal    bool
-	IsRemote   bool
-	IsDefault  bool
-	IsCurrent  bool
-	IsStale    bool
-	IsMerged   bool
-}
-
 // GetBranches returns a list of all git branches in the current repository
 func GetBranches() ([]Branch, error) {
 	// Get all branches with their commit info
@@ -88,16 +75,9 @@ func GetBranches() ([]Branch, error) {
 	return branches, nil
 }
 
-// BranchDeletionResult represents the result of a branch deletion
-type BranchDeletionResult struct {
-	Name    string
-	Success bool
-	Error   string
-}
-
-// DeleteBranches deletes the specified git branches one by one
+// DeleteBranches deletes the specified branches
 func DeleteBranches(branches []string) []BranchDeletionResult {
-	var results []BranchDeletionResult
+	results := make([]BranchDeletionResult, 0, len(branches))
 
 	for _, branch := range branches {
 		cmd := exec.Command("git", "branch", "-D", branch)

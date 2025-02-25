@@ -16,8 +16,8 @@ func NewBranchStream(g *Git) *BranchStream {
 }
 
 // StreamBranches streams branches one at a time through the channel
-func (bs *BranchStream) StreamBranches(ctx context.Context) (<-chan GitBranch, <-chan error) {
-	branchChan := make(chan GitBranch)
+func (bs *BranchStream) StreamBranches(ctx context.Context) (branches <-chan Branch, errs <-chan error) {
+	branchChan := make(chan Branch)
 	errChan := make(chan error, 1)
 
 	go func() {

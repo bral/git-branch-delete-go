@@ -162,5 +162,5 @@ func ConfirmDeletion(branches []string) (bool, error) {
 		return false, nil
 	}
 
-	return strings.ToLower(result) == "y", nil
+	return strings.EqualFold(result, "y"), nil
 }
