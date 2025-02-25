@@ -62,8 +62,8 @@ func runList(cmd *cobra.Command, args []string) error {
 	var filteredBranches []git.Branch
 	for _, branch := range branches {
 		if showAll ||
-		   (showRemote && branch.IsRemote) ||
-		   (!showRemote && !branch.IsRemote) {
+			(showRemote && branch.IsRemote) ||
+			(!showRemote && !branch.IsRemote) {
 			filteredBranches = append(filteredBranches, branch)
 		}
 	}

@@ -11,7 +11,7 @@ import (
 
 var (
 	interactiveForce bool
-	interactiveAll  bool
+	interactiveAll   bool
 )
 
 func init() {

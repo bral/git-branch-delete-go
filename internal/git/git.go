@@ -19,9 +19,9 @@ const (
 
 // Git represents a git repository
 type Git struct {
-	workDir   string
-	gitPath   string
-	timeout   time.Duration
+	workDir string
+	gitPath string
+	timeout time.Duration
 }
 
 // New creates a new Git instance
@@ -94,30 +94,30 @@ func (g *Git) execGit(args ...string) (string, error) {
 
 	// Explicitly allowed environment variables
 	allowedEnvPrefixes := map[string]bool{
-		"HOME=":            true,  // Required for git config
-		"USER=":           true,  // Required for git config
-		"PATH=":           true,  // Required for git executable
-		"SSH_AUTH_SOCK=":  true,  // Required for SSH auth
-		"SSH_AGENT_PID=":  true,  // Required for SSH auth
-		"DISPLAY=":        true,  // Required for SSH askpass
-		"TERM=":           true,  // Required for terminal output
-		"LANG=":           true,  // Required for locale
-		"LC_ALL=":         true,  // Required for locale
-		"XDG_CONFIG_HOME=": true,  // Required for git config
-		"XDG_CACHE_HOME=":  true,  // Required for git credential
+		"HOME=":            true, // Required for git config
+		"USER=":            true, // Required for git config
+		"PATH=":            true, // Required for git executable
+		"SSH_AUTH_SOCK=":   true, // Required for SSH auth
+		"SSH_AGENT_PID=":   true, // Required for SSH auth
+		"DISPLAY=":         true, // Required for SSH askpass
+		"TERM=":            true, // Required for terminal output
+		"LANG=":            true, // Required for locale
+		"LC_ALL=":          true, // Required for locale
+		"XDG_CONFIG_HOME=": true, // Required for git config
+		"XDG_CACHE_HOME=":  true, // Required for git credential
 	}
 
 	// Explicitly allowed GIT_ variables
 	allowedGitVars := map[string]bool{
-		"GIT_TERMINAL_PROMPT": true,
-		"GIT_ASKPASS":        true,
-		"GIT_SSH":            true,
-		"GIT_SSH_COMMAND":    true,
-		"GIT_CONFIG_NOSYSTEM": true,
-		"GIT_AUTHOR_NAME":    true,
-		"GIT_AUTHOR_EMAIL":   true,
-		"GIT_COMMITTER_NAME": true,
-		"GIT_COMMITTER_EMAIL": true,
+		"GIT_TERMINAL_PROMPT":   true,
+		"GIT_ASKPASS":           true,
+		"GIT_SSH":               true,
+		"GIT_SSH_COMMAND":       true,
+		"GIT_CONFIG_NOSYSTEM":   true,
+		"GIT_AUTHOR_NAME":       true,
+		"GIT_AUTHOR_EMAIL":      true,
+		"GIT_COMMITTER_NAME":    true,
+		"GIT_COMMITTER_EMAIL":   true,
 		"GIT_CREDENTIAL_HELPER": true,
 	}
 
@@ -148,9 +148,9 @@ func (g *Git) execGit(args ...string) (string, error) {
 
 	// Append our git-specific environment variables
 	gitEnv := []string{
-		"GIT_TERMINAL_PROMPT=1",     // Always enable terminal prompts
-		"GIT_PROTOCOL=version=2",    // Use Git protocol v2
-		"LC_ALL=C",                  // Use consistent locale
+		"GIT_TERMINAL_PROMPT=1",  // Always enable terminal prompts
+		"GIT_PROTOCOL=version=2", // Use Git protocol v2
+		"LC_ALL=C",               // Use consistent locale
 	}
 
 	cmd.Env = append(filteredEnv, gitEnv...)
@@ -177,7 +177,7 @@ func (g *Git) execGit(args ...string) (string, error) {
 func (g *Git) execGitQuiet(args ...string) (string, error) {
 	cmd := exec.Command(g.gitPath, args...)
 	cmd.Dir = g.workDir
-	cmd.Stdin = os.Stdin  // Prevent hanging
+	cmd.Stdin = os.Stdin // Prevent hanging
 	out, err := cmd.Output()
 	if err != nil {
 		return "", err
@@ -208,7 +208,7 @@ func (g *Git) execGitWithStdout(args ...string) (*exec.Cmd, io.ReadCloser, error
 	cmd := exec.CommandContext(ctx, g.gitPath, args...)
 	cmd.Dir = g.workDir
 	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin  // Prevent hanging
+	cmd.Stdin = os.Stdin // Prevent hanging
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -390,7 +390,7 @@ func (g *Git) verifyRemoteAccess() error {
 	_, err := g.execGit("ls-remote", "--quiet", "origin")
 	if err != nil {
 		if strings.Contains(err.Error(), "could not read Username") ||
-		   strings.Contains(err.Error(), "Authentication failed") {
+			strings.Contains(err.Error(), "Authentication failed") {
 			return fmt.Errorf("authentication failed. For HTTPS, run: git config --global credential.helper store\nFor SSH, ensure your SSH key is added to GitHub")
 		}
 		if strings.Contains(err.Error(), "Permission denied") {

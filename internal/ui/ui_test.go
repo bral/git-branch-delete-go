@@ -142,8 +142,8 @@ func TestSimpleConfirmDeletion(t *testing.T) {
 			branches: []git.Branch{
 				{Name: "feature/test"},
 			},
-			input:   "invalid\n",
-			want:    false,
+			input: "invalid\n",
+			want:  false,
 		},
 		{
 			name:     "no branches",

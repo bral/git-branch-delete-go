@@ -17,23 +17,23 @@ var (
 	// - Cannot end with '.lock'
 	// Using multiple regexes instead of negative lookahead
 	branchStartDotRegex = regexp.MustCompile(`^\.`)
-	doubleDotRegex     = regexp.MustCompile(`\.\.`)
-	endSlashRegex      = regexp.MustCompile(`/$`)
-	endLockRegex       = regexp.MustCompile(`\.lock$`)
+	doubleDotRegex      = regexp.MustCompile(`\.\.`)
+	endSlashRegex       = regexp.MustCompile(`/$`)
+	endLockRegex        = regexp.MustCompile(`\.lock$`)
 	// More restrictive valid chars regex
-	validCharsRegex    = regexp.MustCompile(`^[a-zA-Z0-9][-a-zA-Z0-9/_]+$`)
+	validCharsRegex = regexp.MustCompile(`^[a-zA-Z0-9][-a-zA-Z0-9/_]+$`)
 
 	// Consolidated git command validation
 	allowedGitCommands = map[string]bool{
 		// Core commands we use
-		"branch":        true,
+		"branch":       true,
 		"push":         true,
 		"rev-parse":    true,
 		"show-ref":     true,
 		"ls-remote":    true,
 		"for-each-ref": true,
-		"checkout":     true,  // For branch creation and switching
-		"commit":       true,  // For creating test commits
+		"checkout":     true, // For branch creation and switching
+		"commit":       true, // For creating test commits
 	}
 
 	// Allowed git flags with descriptions for security audit
@@ -47,31 +47,31 @@ var (
 		"--allow-empty": true, // Allow empty commits
 
 		// Branch listing and info
-		"-r":            true, // Remote branches
-		"--remotes":     true, // Remote branches (long form)
-		"--merged":      true, // List merged branches
-		"--no-merged":   true, // List unmerged branches
-		"--format":      true, // Custom format
-		"--abbrev-ref": true,  // Short ref names
-		"--verify":     true,  // Verify ref exists
-		"--quiet":      true,  // Suppress output
-		"--porcelain":  true,  // Machine-readable output
-		"-v":           true,  // Verbose
-		"-vv":          true,  // Very verbose
-		"--short":      true,  // Short SHA
+		"-r":           true, // Remote branches
+		"--remotes":    true, // Remote branches (long form)
+		"--merged":     true, // List merged branches
+		"--no-merged":  true, // List unmerged branches
+		"--format":     true, // Custom format
+		"--abbrev-ref": true, // Short ref names
+		"--verify":     true, // Verify ref exists
+		"--quiet":      true, // Suppress output
+		"--porcelain":  true, // Machine-readable output
+		"-v":           true, // Verbose
+		"-vv":          true, // Very verbose
+		"--short":      true, // Short SHA
 
 		// Remote operations
-		"origin":       true,  // Default remote name
-		"--progress":   true,  // Show progress
-		"--all":        true,  // All refs
+		"origin":     true, // Default remote name
+		"--progress": true, // Show progress
+		"--all":      true, // All refs
 
 		// Special refs
-		"HEAD":         true,  // Current HEAD
-		"refs/heads":   true,  // Local branches
-		"refs/remotes": true,  // Remote branches
+		"HEAD":         true, // Current HEAD
+		"refs/heads":   true, // Local branches
+		"refs/remotes": true, // Remote branches
 
 		// Git config
-		"-c":           true,  // Set config
+		"-c": true, // Set config
 	}
 
 	// Dangerous patterns that could be used for command injection
