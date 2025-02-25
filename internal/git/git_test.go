@@ -26,16 +26,45 @@ func setupTestRepo(t *testing.T) (string, func()) {
 		{"git", "init"},
 		{"git", "config", "user.email", "test@example.com"},
 		{"git", "config", "user.name", "Test User"},
-		{"git", "config", "init.defaultBranch", "main"},
+		{"git", "config", "--local", "init.defaultBranch", "main"},
+		{"git", "config", "--local", "core.autocrlf", "false"},
+	}
+
+	// Run initial commands
+	for _, cmd := range cmds {
+		c := exec.Command(cmd[0], cmd[1:]...)
+		c.Dir = dir
+		c.Env = append(os.Environ(),
+			"GIT_CONFIG_GLOBAL=/dev/null",
+			"GIT_CONFIG_SYSTEM=/dev/null",
+		)
+		if err := c.Run(); err != nil {
+			cleanup()
+			t.Fatalf("Failed to run command %v: %v", cmd, err)
+		}
+	}
+
+	// Create initial commit and branches
+	branchCmds := [][]string{
+		// Create initial commit on main
+		{"git", "checkout", "--orphan", "main"},
 		{"git", "commit", "--allow-empty", "-m", "Initial commit"},
+		// Create and setup feature branches
 		{"git", "branch", "feature/test"},
 		{"git", "branch", "feature/test2"},
 	}
 
-	for _, cmd := range cmds {
+	for _, cmd := range branchCmds {
 		c := exec.Command(cmd[0], cmd[1:]...)
 		c.Dir = dir
-		require.NoError(t, c.Run())
+		c.Env = append(os.Environ(),
+			"GIT_CONFIG_GLOBAL=/dev/null",
+			"GIT_CONFIG_SYSTEM=/dev/null",
+		)
+		if err := c.Run(); err != nil {
+			cleanup()
+			t.Fatalf("Failed to run command %v: %v", cmd, err)
+		}
 	}
 
 	return dir, cleanup
@@ -151,7 +180,6 @@ func setupBenchmarkRepo(b *testing.B) (string, func()) {
 		{"git", "config", "user.email", "test@example.com"},
 		{"git", "config", "user.name", "Test User"},
 		{"git", "config", "init.defaultBranch", "main"},
-		{"git", "commit", "--allow-empty", "-m", "Initial commit"},
 	}
 
 	for _, cmd := range cmds {
