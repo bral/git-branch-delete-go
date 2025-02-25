@@ -12,32 +12,6 @@ import (
 	"golang.org/x/term"
 )
 
-type branchItem struct {
-	Name       string
-	CommitHash string
-	Message    string
-	IsCurrent  bool
-	IsMerged   bool
-	Selected   bool
-	IsSpecial  bool // For special options like "Delete All But Current"
-}
-
-func (b branchItem) String() string {
-	if b.IsSpecial {
-		check := " "
-		if b.Selected {
-			check = "✓"
-		}
-		return fmt.Sprintf("[%s] \033[1;33m%s\033[0m", check, b.Name)
-	}
-
-	check := " "
-	if b.Selected {
-		check = "✓"
-	}
-	return fmt.Sprintf("[%s] %s [%s] %s (%v)", check, b.Name, b.CommitHash, b.Message, b.IsMerged)
-}
-
 type branchSelector struct {
 	branches     []git.Branch
 	selected     map[int]bool

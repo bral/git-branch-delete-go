@@ -42,7 +42,7 @@ func generateRandomName() (string, error) {
 	return fmt.Sprintf("test_%s", hex.EncodeToString(bytes)), nil
 }
 
-func runTest(cmd *cobra.Command, args []string) error {
+func runTest(_ *cobra.Command, args []string) error {
 	// Get working directory
 	wd, err := os.Getwd()
 	if err != nil {

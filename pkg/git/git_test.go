@@ -134,7 +134,7 @@ func TestVerifyRepo(t *testing.T) {
 
 	// Test invalid repo
 	invalidDir := filepath.Join(t.TempDir(), "not-a-repo")
-	require.NoError(t, os.MkdirAll(invalidDir, 0755))
+	require.NoError(t, os.MkdirAll(invalidDir, 0o755))
 
 	g = New(invalidDir)
 	err = g.verifyRepo()
@@ -143,8 +143,8 @@ func TestVerifyRepo(t *testing.T) {
 
 	// Test inaccessible directory
 	inaccessibleDir := filepath.Join(t.TempDir(), "no-access")
-	require.NoError(t, os.MkdirAll(inaccessibleDir, 0000))
-	defer os.Chmod(inaccessibleDir, 0755) // Restore permissions for cleanup
+	require.NoError(t, os.MkdirAll(inaccessibleDir, 0o000))
+	defer os.Chmod(inaccessibleDir, 0o755) // Restore permissions for cleanup
 
 	g = New(inaccessibleDir)
 	err = g.verifyRepo()

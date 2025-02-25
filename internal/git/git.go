@@ -658,17 +658,3 @@ func (g *Git) CheckoutBranch(name string) error {
 	}
 	return nil
 }
-
-type Branch struct {
-	Name       string
-	CommitHash string
-	Message    string
-	IsCurrent  bool
-	IsMerged   bool
-}
-
-func (g *Git) handleAuthError(_ string) error {
-	return &AuthError{
-		Msg: "Git authentication failed",
-	}
-}
