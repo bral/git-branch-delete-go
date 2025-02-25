@@ -11,20 +11,20 @@ import (
 
 // Config holds the application configuration
 type Config struct {
-	DryRun            bool     `json:"dryRun"`
-	AutoConfirm       bool     `json:"autoConfirm"`
+	DefaultBranch     string   `json:"defaultBranch"`
 	ProtectedBranches []string `json:"protectedBranches"`
 	DefaultRemote     string   `json:"defaultRemote"`
+	AutoConfirm       bool     `json:"autoConfirm"`
 	MaxBranchLength   int      `json:"maxBranchLength"`
 }
 
 // DefaultConfig returns a default configuration
 func DefaultConfig() *Config {
 	return &Config{
-		DryRun:            false,
-		AutoConfirm:       false,
-		ProtectedBranches: []string{"main", "master", "develop", "release"},
+		DefaultBranch:     "main",
+		ProtectedBranches: []string{"main", "master", "develop"},
 		DefaultRemote:     "origin",
+		AutoConfirm:       false,
 		MaxBranchLength:   255, // Git's limit
 	}
 }

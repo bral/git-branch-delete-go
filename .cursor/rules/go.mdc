@@ -11,7 +11,7 @@ You are an expert AI programming assistant specializing in building Go CLI appli
 - testing with testify
 - golang/mock for mocking
 
-General Principles
+## General Principles
 - Follow idiomatic Go practices and the user's requirements precisely
 - First think step-by-step - outline the command structure and data flow
 - Write clear, maintainable, and well-documented code
@@ -19,14 +19,14 @@ General Principles
 - Follow the Unix philosophy: do one thing well, handle text streams, be composable
 - Always be sure that any changes you make will build
 
-Code Style and Structure
+## Code Style and Structure
 - Follow standard Go formatting and naming conventions
 - Use cobra's recommended project layout
 - Implement proper exit codes and signal handling
 - Handle stdin/stdout/stderr appropriately
 - Use interfaces for better testability and flexibility
 
-Project Structure
+## Project Structure
 ```
 Project Dir
   └── cmd/
@@ -50,14 +50,14 @@ Project Dir
   └── Makefile
 ```
 
-Command Implementation
+## Command Implementation
 - Use cobra.Command struct for all commands
 - Implement PreRun and PostRun hooks when needed
 - Follow consistent flag naming patterns
 - Provide clear, concise command descriptions and examples
 - Use cobra's built-in help templates
 
-Example Command Structure:
+### Example Command Structure:
 ```go
 func newExampleCmd() *cobra.Command {
     cmd := &cobra.Command{
@@ -80,28 +80,52 @@ spanning multiple lines.`,
 }
 ```
 
-Configuration Handling
+## Configuration Handling
 - Use viper for configuration management
 - Support multiple config formats (YAML, JSON, TOML)
 - Handle environment variables consistently
 - Implement config file search paths
 - Validate configuration on load
 
-Error Handling
+## Error Handling
 - Return errors rather than handling them internally
 - Use custom error types when beneficial
 - Provide clear error messages to users
 - Implement proper logging levels
 - Use appropriate exit codes
 
-User Interaction
+## User Interaction
 - Implement consistent color schemes using fatih/color
 - Provide progress indicators for long operations
 - Support both interactive and non-interactive modes
 - Implement proper terminal width handling
 - Support quiet/verbose modes
 
-Testing
+## Channel Patterns
+
+### Channel Closure with Timeout
+When handling a channel that needs both closure detection and timeout handling:
+```go
+loop:
+    for {
+        select {
+        case result, ok := <-ch:
+            if !ok {
+                break loop // Use labeled break to exit both select and for
+            }
+            // Handle result
+        case <-ctx.Done():
+            return ctx.Err()
+        }
+    }
+```
+This pattern ensures:
+- Clean exit when channel is closed
+- Proper timeout handling
+- No unreachable code issues
+- No goroutine leaks
+
+## Testing
 - Write unit tests for all commands
 - Use testify for assertions
 - Implement integration tests for full workflows
@@ -109,7 +133,7 @@ Testing
 - Test with different config scenarios
 - Test error conditions and edge cases
 
-Example Test Structure:
+### Example Test Structure:
 ```go
 func TestExampleCmd(t *testing.T) {
     tests := []struct {
@@ -135,7 +159,7 @@ func TestExampleCmd(t *testing.T) {
 }
 ```
 
-Documentation
+## Documentation
 - Write clear godoc comments
 - Provide usage examples in README
 - Document all commands and flags
@@ -143,14 +167,14 @@ Documentation
 - Document configuration options
 - Provide contribution guidelines
 
-Build and Release
+## Build and Release
 - Use semantic versioning
 - Implement proper build tags
 - Support multiple platforms
 - Use goreleaser for releases
 - Implement proper version information
 
-Example Makefile targets:
+## Example Makefile targets:
 ```makefile
 .PHONY: build test lint clean
 
@@ -167,21 +191,21 @@ clean:
     rm -rf bin/
 ```
 
-Performance Considerations
+## Performance Considerations
 - Implement proper resource cleanup
 - Use goroutines appropriately
 - Handle large data sets efficiently
 - Implement timeout mechanisms
 - Profile CPU and memory usage
 
-Security Best Practices
+## Security Best Practices
 - Handle sensitive data appropriately
 - Implement proper file permissions
 - Validate all user inputs
 - Use secure random when needed
 - Follow OWASP guidelines for CLI apps
 
-Always ensure your CLI tool:
+## Always ensure your CLI tool:
 - Has clear, consistent user interaction
 - Provides helpful error messages
 - Is well-tested and maintainable

@@ -90,16 +90,56 @@ func (g *Git) execGit(args ...string) (string, error) {
 	// Get existing environment
 	env := os.Environ()
 
-	// Filter and append our specific git environment variables
+	// Explicitly allowed environment variables
+	allowedEnvPrefixes := map[string]bool{
+		"HOME=":            true,  // Required for git config
+		"USER=":           true,  // Required for git config
+		"PATH=":           true,  // Required for git executable
+		"SSH_AUTH_SOCK=":  true,  // Required for SSH auth
+		"SSH_AGENT_PID=":  true,  // Required for SSH auth
+		"DISPLAY=":        true,  // Required for SSH askpass
+		"TERM=":           true,  // Required for terminal output
+		"LANG=":           true,  // Required for locale
+		"LC_ALL=":         true,  // Required for locale
+		"XDG_CONFIG_HOME=": true,  // Required for git config
+		"XDG_CACHE_HOME=":  true,  // Required for git credential
+	}
+
+	// Explicitly allowed GIT_ variables
+	allowedGitVars := map[string]bool{
+		"GIT_TERMINAL_PROMPT": true,
+		"GIT_ASKPASS":        true,
+		"GIT_SSH":            true,
+		"GIT_SSH_COMMAND":    true,
+		"GIT_CONFIG_NOSYSTEM": true,
+		"GIT_AUTHOR_NAME":    true,
+		"GIT_AUTHOR_EMAIL":   true,
+		"GIT_COMMITTER_NAME": true,
+		"GIT_COMMITTER_EMAIL": true,
+		"GIT_CREDENTIAL_HELPER": true,
+	}
+
+	// Filter environment variables
 	filteredEnv := make([]string, 0, len(env))
 	for _, e := range env {
-		// Keep important environment variables
-		if strings.HasPrefix(e, "HOME=") ||
-			strings.HasPrefix(e, "PATH=") ||
-			strings.HasPrefix(e, "SSH_") ||
-			strings.HasPrefix(e, "GIT_") || // Keep all existing GIT_* variables
-			strings.HasPrefix(e, "XDG_CONFIG_HOME=") ||
-			strings.HasPrefix(e, "TERM=") {
+		// Check if it's an explicitly allowed env var
+		allowed := false
+		for prefix := range allowedEnvPrefixes {
+			if strings.HasPrefix(e, prefix) {
+				allowed = true
+				break
+			}
+		}
+
+		// Check if it's an allowed GIT_ variable
+		if strings.HasPrefix(e, "GIT_") {
+			varName := strings.SplitN(e, "=", 2)[0]
+			if allowedGitVars[varName] {
+				allowed = true
+			}
+		}
+
+		if allowed {
 			filteredEnv = append(filteredEnv, e)
 		}
 	}
@@ -107,12 +147,7 @@ func (g *Git) execGit(args ...string) (string, error) {
 	// Append our git-specific environment variables
 	gitEnv := []string{
 		"GIT_TERMINAL_PROMPT=1",     // Always enable terminal prompts
-		"GIT_CONFIG_NOSYSTEM=1",     // Ignore system config
-		"GIT_FLUSH=1",               // Disable output buffering
 		"GIT_PROTOCOL=version=2",    // Use Git protocol v2
-		"GIT_TRACE_PACK_ACCESS=",    // Disable pack tracing
-		"GIT_TRACE_PACKET=",         // Disable packet tracing
-		"GIT_TRACE=",                // Disable general tracing
 		"LC_ALL=C",                  // Use consistent locale
 	}
 
@@ -150,16 +185,17 @@ func (g *Git) execGitQuiet(args ...string) (string, error) {
 
 // GitBranch represents a git branch and its metadata
 type GitBranch struct {
-	Name       string
-	CommitHash string
-	Reference  string
-	IsCurrent  bool
-	IsRemote   bool
-	IsDefault  bool
-	IsMerged   bool
-	IsStale    bool
-	IsBehind   bool
-	Message    string
+	Name           string
+	CommitHash     string
+	Reference      string
+	IsCurrent      bool
+	IsRemote       bool
+	IsDefault      bool
+	IsMerged       bool
+	IsStale        bool
+	IsBehind       bool
+	Message        string
+	TrackingBranch string // Add tracking branch info
 }
 
 // execGitWithStdout executes a git command and returns its stdout pipe
@@ -229,41 +265,89 @@ func (g *Git) isDefaultBranch(ref string) bool {
 	return false
 }
 
-// DeleteBranch deletes a git branch
-func (g *Git) DeleteBranch(name string, force bool, remote bool) error {
-	// Validate branch name
-	if err := ValidateBranchName(name); err != nil {
-		return newInvalidBranchError(name, err.Error())
-	}
-
-	// Don't allow deletion of protected branches
-	if isProtectedBranch(name) {
-		return newProtectedBranchError(name)
-	}
-
-	// Verify branch exists before attempting deletion
-	exists, err := g.branchExists(name, remote)
-	if err != nil {
-		return newGitCommandError("branch exists check", "", err)
-	}
-	if !exists {
-		return newInvalidBranchError(name, "branch does not exist")
-	}
-
-	// Check if branch is fully merged if not force deleting
-	if !force && !remote {
-		merged, err := g.isBranchMerged(name)
-		if err != nil {
-			return newGitCommandError("merge check", "", err)
-		}
-		if !merged {
-			return newUnmergedBranchError(name)
-		}
-	}
-
+// branchExists checks if a branch exists locally or remotely
+func (g *Git) branchExists(name string, remote bool) (bool, error) {
 	var args []string
 	if remote {
-		// For remote branches, use push --delete
+		args = []string{"ls-remote", "origin", "refs/heads/" + name}
+	} else {
+		args = []string{"show-ref", "--verify", "--quiet", "refs/heads/" + name}
+	}
+
+	_, err := g.execGit(args...)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "unknown revision") {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// handleAuthError provides interactive help for authentication errors
+func (g *Git) handleAuthError(errStr string) error {
+	// Check if this is an HTTPS URL
+	remoteURL, err := g.execGitQuiet("config", "--get", "remote.origin.url")
+	if err != nil {
+		return fmt.Errorf("failed to get remote URL: %w", err)
+	}
+
+	isHTTPS := strings.HasPrefix(remoteURL, "https://")
+	isSSH := strings.HasPrefix(remoteURL, "git@")
+
+	if isHTTPS {
+		return fmt.Errorf("authentication failed. Please ensure your git credentials are configured:\n" +
+			"1. Check existing credentials: git config --global --get credential.helper\n" +
+			"2. For macOS, use keychain: git config --global credential.helper osxkeychain\n" +
+			"3. For other systems, see: https://git-scm.com/docs/gitcredentials")
+	}
+
+	if isSSH {
+		// For SSH, check if SSH agent is running and has keys
+		sshAdd := exec.Command("ssh-add", "-l")
+		if err := sshAdd.Run(); err != nil {
+			return fmt.Errorf("no SSH keys found. Please add your SSH key to the agent:\n" +
+				"1. Start SSH agent: eval `ssh-agent`\n" +
+				"2. Add your key: ssh-add ~/.ssh/id_rsa\n" +
+				"3. Verify key is added: ssh-add -l")
+		}
+		return fmt.Errorf("SSH key found but authentication failed. Please ensure your key is added to GitHub:\n" +
+			"1. Copy your public key: cat ~/.ssh/id_rsa.pub\n" +
+			"2. Add it to GitHub: https://github.com/settings/keys")
+	}
+
+	// Generic authentication error
+	return fmt.Errorf("authentication failed. Please configure your credentials:\n" +
+		"For HTTPS: ensure your system git credentials are configured\n" +
+		"For SSH: ensure your SSH key is added to GitHub")
+}
+
+// DeleteBranch deletes a branch locally and/or remotely
+func (g *Git) DeleteBranch(name string, force bool, remote bool) error {
+	// Check if branch exists
+	exists, err := g.branchExists(name, remote)
+	if err != nil {
+		return fmt.Errorf("failed to check if branch exists: %w", err)
+	}
+	if !exists {
+		return fmt.Errorf("branch '%s' does not exist", name)
+	}
+
+	// For remote operations, verify access first
+	if remote {
+		if err := g.verifyRemoteAccess(); err != nil {
+			if strings.Contains(err.Error(), "Authentication failed") ||
+				strings.Contains(err.Error(), "could not read Username") ||
+				strings.Contains(err.Error(), "Permission denied") {
+				return g.handleAuthError(err.Error())
+			}
+			return err
+		}
+	}
+
+	// Delete branch
+	var args []string
+	if remote {
 		args = []string{"push", "origin", "--delete", name}
 	} else {
 		if force {
@@ -273,37 +357,36 @@ func (g *Git) DeleteBranch(name string, force bool, remote bool) error {
 		}
 	}
 
-	if remote {
-		// For remote operations, use standard git command with proper error handling
-		cmd := exec.Command(g.gitPath, args...)
-		cmd.Dir = g.workDir
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-
-		err := cmd.Run()
-		if err != nil {
-			if exitErr, ok := err.(*exec.ExitError); ok {
-				errStr := string(exitErr.Stderr)
-				if strings.Contains(errStr, "could not read Username") ||
-				   strings.Contains(errStr, "Authentication failed") {
-					return fmt.Errorf("authentication failed. For HTTPS, run: git config --global credential.helper store\nFor SSH, ensure your SSH key is added to GitHub")
-				}
-				if strings.Contains(errStr, "Permission denied") {
-					return fmt.Errorf("permission denied. Please check your credentials and repository permissions")
-				}
-				if strings.Contains(errStr, "remote rejected") {
-					return fmt.Errorf("remote rejected deletion of branch '%s'. Check if you have write access to the repository", name)
-				}
-			}
-			return fmt.Errorf("failed to delete remote branch: %w", err)
+	_, err = g.execGit(args...)
+	if err != nil {
+		// Handle authentication and permission errors
+		errStr := err.Error()
+		if strings.Contains(errStr, "Authentication failed") ||
+			strings.Contains(errStr, "could not read Username") ||
+			strings.Contains(errStr, "Permission denied") {
+			return g.handleAuthError(errStr)
 		}
-		return nil
+		return fmt.Errorf("failed to delete branch: %w", err)
 	}
 
-	// For local branches, use regular execGit
-	_, err = g.execGit(args...)
-	return err
+	return nil
+}
+
+// verifyRemoteAccess checks if we can access the remote repository
+func (g *Git) verifyRemoteAccess() error {
+	// Try to list remote refs
+	_, err := g.execGit("ls-remote", "--quiet", "origin")
+	if err != nil {
+		if strings.Contains(err.Error(), "could not read Username") ||
+		   strings.Contains(err.Error(), "Authentication failed") {
+			return fmt.Errorf("authentication failed. For HTTPS, run: git config --global credential.helper store\nFor SSH, ensure your SSH key is added to GitHub")
+		}
+		if strings.Contains(err.Error(), "Permission denied") {
+			return fmt.Errorf("permission denied. Please check your credentials and repository permissions")
+		}
+		return fmt.Errorf("failed to access remote repository: %w", err)
+	}
+	return nil
 }
 
 // isBranchMerged checks if a branch is fully merged into the current branch
@@ -332,35 +415,17 @@ func (g *Git) isBranchMerged(name string) (bool, error) {
 	return false, nil
 }
 
-// branchExists checks if a branch exists
-func (g *Git) branchExists(name string, remote bool) (bool, error) {
-	var args []string
-	if remote {
-		args = []string{"ls-remote", "--heads", "origin", name}
-	} else {
-		args = []string{"show-ref", "--verify", "--quiet", "refs/heads/" + name}
-	}
-
-	_, err := g.execGit(args...)
-	if err != nil {
-		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "unknown revision") {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
-}
-
 // ListBranches lists all git branches
 func (g *Git) ListBranches() ([]GitBranch, error) {
-	// Get current branch for merge checks
-	currentBranch, err := g.execGit("rev-parse", "--abbrev-ref", "HEAD")
+	// Get current branch's tracking info
+	currentTrackingBranch, err := g.execGit("rev-parse", "--abbrev-ref", "@{u}")
 	if err != nil {
-		return nil, fmt.Errorf("failed to get current branch: %w", err)
+		// Don't fail if branch has no upstream
+		currentTrackingBranch = ""
 	}
 
 	// Get merged branches for quick lookup
-	mergedOut, err := g.execGit("branch", "--merged", currentBranch)
+	mergedOut, err := g.execGit("branch", "--merged")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get merged branches: %w", err)
 	}
@@ -372,20 +437,24 @@ func (g *Git) ListBranches() ([]GitBranch, error) {
 		}
 	}
 
-	// Get local branches
-	localOut, err := g.execGit("branch", "--format", "%(refname:short) %(objectname) %(upstream:short) %(if)%(HEAD)%(then)* %(else)  %(end)%(subject)")
-	if err != nil {
-		return nil, err
+	// Get remote merged branches
+	remoteMergedOut, err := g.execGit("branch", "--merged")
+	if err == nil { // Don't fail if remote check fails
+		for _, line := range strings.Split(remoteMergedOut, "\n") {
+			branch := strings.TrimSpace(line)
+			if branch != "" && !strings.HasSuffix(branch, "/HEAD") {
+				mergedBranches[branch] = true
+			}
+		}
 	}
 
-	// Get remote branches
-	remoteOut, err := g.execGit("branch", "-r", "--format", "%(refname:short) %(objectname) %(upstream:short) %(if)%(HEAD)%(then)* %(else)  %(end)%(subject)")
-	if err != nil {
-		return nil, err
-	}
-
-	seen := make(map[string]bool)
 	var branches []GitBranch
+
+	// Get all local branches
+	localOut, err := g.execGit("branch")
+	if err != nil {
+		return nil, err
+	}
 
 	// Process local branches
 	for _, line := range strings.Split(localOut, "\n") {
@@ -393,50 +462,71 @@ func (g *Git) ListBranches() ([]GitBranch, error) {
 			continue
 		}
 
-		branch := parseBranchLine(line)
-		if branch.Name == "" || strings.HasSuffix(branch.Name, "/HEAD") {
-			continue
+		// Parse branch line: "* branch" or "  branch"
+		line = strings.TrimSpace(line)
+		isCurrent := strings.HasPrefix(line, "*")
+		if isCurrent {
+			line = strings.TrimPrefix(line, "*")
+		}
+		name := strings.TrimSpace(line)
+
+		// Get commit hash for branch
+		hash, err := g.execGit("rev-parse", "--short", name)
+		if err != nil {
+			continue // Skip if we can't get hash
 		}
 
-		if err := ValidateBranchName(branch.Name); err != nil {
-			continue
+		branch := GitBranch{
+			Name:       name,
+			CommitHash: hash,
+			Reference:  "refs/heads/" + name,
+			IsCurrent:  isCurrent,
+			IsRemote:   false,
+			IsDefault:  isProtectedBranch(name),
+			IsMerged:   mergedBranches[name],
 		}
 
-		// Set merged status
-		branch.IsMerged = mergedBranches[branch.Name]
-
-		if !seen[branch.Name] {
-			seen[branch.Name] = true
-			branches = append(branches, branch)
+		// Get tracking branch for this local branch
+		if isCurrent && currentTrackingBranch != "" {
+			branch.TrackingBranch = currentTrackingBranch
+		} else {
+			trackingRef, err := g.execGit("rev-parse", "--abbrev-ref", name+"@{u}")
+			if err == nil {
+				branch.TrackingBranch = trackingRef
+			}
 		}
+
+		branches = append(branches, branch)
 	}
 
-	// Process remote branches
-	for _, line := range strings.Split(remoteOut, "\n") {
-		if line == "" {
-			continue
-		}
+	// Get all remote branches
+	remoteOut, err := g.execGit("branch", "--remotes")
+	if err == nil { // Don't fail if remote check fails
+		for _, line := range strings.Split(remoteOut, "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasSuffix(line, "/HEAD") {
+				continue
+			}
 
-		branch := parseBranchLine(line)
-		if branch.Name == "" || strings.HasSuffix(branch.Name, "/HEAD") {
-			continue
-		}
+			fullName := line
+			name := strings.TrimPrefix(fullName, "origin/")
 
-		// Clean up remote branch names
-		if strings.HasPrefix(branch.Name, "origin/") {
-			branch.Name = strings.TrimPrefix(branch.Name, "origin/")
-		}
+			// Get commit hash for remote branch
+			hash, err := g.execGit("rev-parse", "--short", fullName)
+			if err != nil {
+				continue // Skip if we can't get hash
+			}
 
-		if err := ValidateBranchName(branch.Name); err != nil {
-			continue
-		}
+			branch := GitBranch{
+				Name:       name,
+				CommitHash: hash,
+				Reference:  "refs/remotes/" + fullName,
+				IsCurrent:  fullName == currentTrackingBranch,
+				IsRemote:   true,
+				IsDefault:  isProtectedBranch(name),
+				IsMerged:   mergedBranches[fullName],
+			}
 
-		branch.IsRemote = true
-		// For remote branches, check if merged using origin/branch notation
-		branch.IsMerged = mergedBranches["origin/"+branch.Name]
-
-		if !seen[branch.Name] {
-			seen[branch.Name] = true
 			branches = append(branches, branch)
 		}
 	}
@@ -482,4 +572,40 @@ func parseBranchLine(line string) GitBranch {
 		IsDefault:  isProtectedBranch(name),
 		Message:    strings.TrimPrefix(info, "* "),
 	}
+}
+
+// CreateBranch creates a new branch and optionally creates an empty commit
+func (g *Git) CreateBranch(name string, createCommit bool) error {
+	// Create and checkout branch
+	_, err := g.execGit("checkout", "-b", name)
+	if err != nil {
+		return fmt.Errorf("failed to create branch: %w", err)
+	}
+
+	if createCommit {
+		_, err = g.execGit("commit", "--allow-empty", "-m", fmt.Sprintf("Test commit for %s", name))
+		if err != nil {
+			return fmt.Errorf("failed to create test commit: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// PushBranch pushes a branch to the remote
+func (g *Git) PushBranch(name string) error {
+	_, err := g.execGit("push", "-u", "origin", name)
+	if err != nil {
+		return fmt.Errorf("failed to push branch: %w", err)
+	}
+	return nil
+}
+
+// CheckoutBranch checks out a branch
+func (g *Git) CheckoutBranch(name string) error {
+	_, err := g.execGit("checkout", name)
+	if err != nil {
+		return fmt.Errorf("failed to checkout branch: %w", err)
+	}
+	return nil
 }

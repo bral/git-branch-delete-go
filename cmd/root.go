@@ -7,48 +7,23 @@ import (
 )
 
 var (
-	cfgFile string
-	cfg     *config.Config
-
-	// Global flags
-	quietFlag  bool
-	debugFlag  bool
-	dryRunFlag bool
-	logLevel   string
+	cfgFile   string
+	cfg       *config.Config
+	quietFlag bool
+	debugFlag bool
 )
 
 var rootCmd = &cobra.Command{
 	Use:   "git-branch-delete",
-	Short: "A tool to manage git branch deletion",
-	Long: `A CLI tool that helps manage and delete Git branches
-safely and efficiently across your repositories.`,
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		// Set up logging first based on flags
+	Short: "A tool for managing Git branches",
+	Long: `git-branch-delete is a CLI tool for managing Git branches.
+It provides features for listing, deleting, and pruning branches.`,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		if quietFlag {
 			log.SetQuiet(true)
 		} else if debugFlag {
 			log.SetDebug(true)
-		} else {
-			log.SetLevel(logLevel)
 		}
-
-		log.Debug("Debug logging enabled")
-		log.Info("Starting git-branch-delete")
-
-		// Load config
-		var err error
-		cfg, err = config.Load()
-		if err != nil {
-			return err
-		}
-
-		// Override config with flags
-		if dryRunFlag {
-			cfg.DryRun = true
-			log.Info("Dry run mode enabled")
-		}
-
-		return nil
 	},
 }
 
@@ -57,9 +32,16 @@ func Execute() error {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file path")
+	cobra.OnInitialize(initConfig)
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.config/git-branch-delete.yaml)")
 	rootCmd.PersistentFlags().BoolVar(&quietFlag, "quiet", false, "suppress all output except errors")
 	rootCmd.PersistentFlags().BoolVar(&debugFlag, "debug", false, "enable debug output")
-	rootCmd.PersistentFlags().BoolVar(&dryRunFlag, "dry-run", false, "show what would be done without doing it")
-	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "set log level (trace, debug, info, warn, error)")
+}
+
+func initConfig() {
+	var err error
+	cfg, err = config.Load()
+	if err != nil {
+		log.Fatal("Error loading config:", err)
+	}
 }

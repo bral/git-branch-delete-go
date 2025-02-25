@@ -117,11 +117,6 @@ func runPrune(cmd *cobra.Command, args []string) error {
 	for _, branch := range staleBranches {
 		log.Info("Deleting branch", "branch", branch.Name)
 
-		if cfg.DryRun {
-			log.Info("Would delete branch (dry run)", "branch", branch.Name)
-			continue
-		}
-
 		if err := gitClient.DeleteBranch(branch.Name, true, false); err != nil {
 			log.Error("Failed to delete branch", "branch", branch.Name, "error", err)
 			return err

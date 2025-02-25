@@ -95,6 +95,36 @@ func runInteractive(cmd *cobra.Command, args []string) error {
 	choices := make([]string, 0, len(branches))
 	branchMap := make(map[string]git.GitBranch, len(branches))
 
+	// First find and display current branch
+	var currentBranch string
+	for _, b := range branches {
+		if b.IsCurrent {
+			var indicators []string
+			if b.IsStale {
+				indicators = append(indicators, color.RedString("stale"))
+			}
+			if !b.IsMerged {
+				indicators = append(indicators, color.YellowString("unmerged"))
+			}
+			if b.IsMerged {
+				indicators = append(indicators, color.GreenString("merged"))
+			}
+
+			currentBranch = fmt.Sprintf("%s %s%s",
+				color.CyanString("*"),
+				color.HiWhiteString(b.Name),
+				func() string {
+					if len(indicators) > 0 {
+						return " (" + strings.Join(indicators, ", ") + ")"
+					}
+					return ""
+				}(),
+			)
+			break
+		}
+	}
+
+	// Then process other branches
 	for _, b := range branches {
 		// Skip current and protected branches
 		if b.IsCurrent || b.IsDefault {
@@ -153,7 +183,7 @@ func runInteractive(cmd *cobra.Command, args []string) error {
 	// Sort choices for better UX
 	sortBranchChoices(choices)
 
-	// Show branch type counts
+	// Show branch type counts and current branch
 	totalLocalCount := 0
 	totalRemoteCount := 0
 	for _, b := range branchMap {
@@ -163,7 +193,12 @@ func runInteractive(cmd *cobra.Command, args []string) error {
 			totalLocalCount++
 		}
 	}
+	fmt.Printf("\n%s\n", color.HiBlackString("─── Current Branch ───────────────────────"))
+	fmt.Printf("  %s\n", currentBranch)
+	fmt.Printf("\n")
+	fmt.Printf("%s\n", color.HiBlackString("─── Available Branches ────────────────────"))
 	fmt.Printf("Found %d local and %d remote branches\n", totalLocalCount, totalRemoteCount)
+	fmt.Printf("\n")
 
 	// Configure survey templates
 	survey.SelectQuestionTemplate = `
@@ -178,9 +213,9 @@ func runInteractive(cmd *cobra.Command, args []string) error {
 {{- "\n"}}
 {{- range $ix, $option := .PageEntries}}
   {{- if eq $ix $.SelectedIndex }}{{color "cyan"}}❯{{color "reset"}}{{else}} {{end}}
-  {{- if index $.Checked $option.Index }}[x]{{else}}[ ]{{end}}
+  {{- if index $.Checked $option.Index }}{{color "green"}}✓{{color "reset"}}{{else}}{{color "default"}}○{{color "reset"}}{{end}}
   {{- " "}}{{ $option.Value }}
-  {{- "\n"}}
+{{- "\n"}}
 {{- end}}`
 
 	var selected []string
@@ -200,6 +235,14 @@ func runInteractive(cmd *cobra.Command, args []string) error {
 		},
 		Help: "↑/↓: navigate • space: select • enter: confirm",
 		PageSize: 15,
+		// The survey package has built-in filtering that can't be fully disabled.
+		// This is a workaround that preserves all options by always returning true,
+		// effectively neutralizing the filtering behavior while maintaining the
+		// selection state. This prevents the issue where typing would cause
+		// selections to disappear.
+		Filter: func(filter string, value string, index int) bool {
+			return true
+		},
 	}
 
 	err = survey.AskOne(prompt, &selected, survey.WithPageSize(15))
@@ -240,21 +283,31 @@ func runInteractive(cmd *cobra.Command, args []string) error {
 	}
 
 	// Show selection summary
-	log.Info("\nSelected branches:")
+	fmt.Printf("\nSelected branches:\n\n")
 	maxDisplay := 5
 	if len(selectedNames) > maxDisplay {
 		// Display first 5 branches
-		for _, name := range selectedNames[:maxDisplay] {
-			log.Info("  %s", name)
+		for i, name := range selectedNames[:maxDisplay] {
+			branch := selectedBranches[i]
+			indicator := color.GreenString("[local]")
+			if branch.IsRemote {
+				indicator = color.BlueString("[remote]")
+			}
+			fmt.Printf("  %s %s %s%s\n", color.GreenString("✓"), indicator, name, formatCommitHash(branch.CommitHash))
 		}
-		log.Info("  ... and %d more", len(selectedNames)-maxDisplay)
+		fmt.Printf("  ... and %d more\n", len(selectedNames)-maxDisplay)
 	} else {
 		// Display all branches
-		for _, name := range selectedNames {
-			log.Info("  %s", name)
+		for i, name := range selectedNames {
+			branch := selectedBranches[i]
+			indicator := color.GreenString("[local]")
+			if branch.IsRemote {
+				indicator = color.BlueString("[remote]")
+			}
+			fmt.Printf("  %s %s %s%s\n", color.GreenString("✓"), indicator, name, formatCommitHash(branch.CommitHash))
 		}
 	}
-	log.Info("Total: %s, %s",
+	fmt.Printf("\nTotal: %s, %s\n",
 		color.GreenString("%d local", localCount),
 		color.BlueString("%d remote", remoteCount))
 
@@ -356,11 +409,12 @@ func runInteractive(cmd *cobra.Command, args []string) error {
 
 	// Collect results with timeout
 	var errs []string
-	for i := 0; i < len(selectedBranches); i++ {
+loop:
+	for {
 		select {
 		case result, ok := <-results:
 			if !ok {
-				break
+				break loop
 			}
 			if result.err != nil {
 				failCount++
@@ -395,9 +449,9 @@ func runInteractive(cmd *cobra.Command, args []string) error {
 		seconds := int(timeSaved.Seconds()) % 60
 
 		if minutes > 0 {
-			log.Info("Saved you ~%d minutes and %d seconds of manual work! 🚀", minutes, seconds)
+			fmt.Printf("Saved you ~%d minutes and %d seconds of manual work! 🚀\n", minutes, seconds)
 		} else {
-			log.Info("Saved you ~%d seconds of manual work! 🚀", seconds)
+			fmt.Printf("Saved you ~%d seconds of manual work! 🚀\n", seconds)
 		}
 	}
 
@@ -456,4 +510,15 @@ func sortBranchChoices(choices []string) {
 		sorted[i] = s.value
 	}
 	copy(choices, sorted)
+}
+
+// Add helper function at the end of the file
+func formatCommitHash(hash string) string {
+	if hash == "" {
+		return ""
+	}
+	if len(hash) > 7 {
+		hash = hash[:7]
+	}
+	return color.HiBlackString(" " + hash)
 }

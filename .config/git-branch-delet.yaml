@@ -5,4 +5,3 @@ protected_branches:
   - develop
 default_remote: origin
 auto_confirm: false
-dry_run: false
