@@ -51,7 +51,9 @@ func New(workDir string) (*Git, error) {
 	}, nil
 }
 
-// SetTimeout sets the timeout for git commands
+// SetTimeout sets the timeout duration for git operations.
+// If timeout is less than or equal to zero, the timeout will not be changed.
+// The default timeout is 30 seconds.
 func (g *Git) SetTimeout(timeout time.Duration) {
 	if timeout > 0 {
 		g.timeout = timeout
@@ -322,7 +324,17 @@ func (g *Git) handleAuthError(errStr string) error {
 		"For SSH: ensure your SSH key is added to GitHub")
 }
 
-// DeleteBranch deletes a branch locally and/or remotely
+// DeleteBranch deletes a git branch either locally or remotely.
+// Parameters:
+//   - name: The name of the branch to delete
+//   - force: If true, force delete even if branch is not fully merged
+//   - remote: If true, delete the remote branch instead of local
+//
+// Returns an error if:
+//   - The branch doesn't exist
+//   - Authentication fails for remote operations
+//   - The branch is protected
+//   - The branch is not fully merged (without force)
 func (g *Git) DeleteBranch(name string, force bool, remote bool) error {
 	// Check if branch exists
 	exists, err := g.branchExists(name, remote)
@@ -415,7 +427,20 @@ func (g *Git) isBranchMerged(name string) (bool, error) {
 	return false, nil
 }
 
-// ListBranches lists all git branches
+// ListBranches returns a list of all branches in the repository.
+// The returned list includes both local and remote branches with their current status.
+// Each branch includes information about:
+//   - Whether it's the current branch
+//   - Whether it's a remote branch
+//   - Whether it's the default branch
+//   - Whether it's merged
+//   - Whether it's stale (deleted from remote)
+//   - The latest commit hash and message
+//
+// Returns an error if:
+//   - Not in a git repository
+//   - Git command fails
+//   - Unable to parse branch information
 func (g *Git) ListBranches() ([]GitBranch, error) {
 	// Get current branch's tracking info
 	currentTrackingBranch, err := g.execGit("rev-parse", "--abbrev-ref", "@{u}")
@@ -574,7 +599,16 @@ func parseBranchLine(line string) GitBranch {
 	}
 }
 
-// CreateBranch creates a new branch and optionally creates an empty commit
+// CreateBranch creates a new git branch.
+// Parameters:
+//   - name: The name of the new branch
+//   - createCommit: If true, creates an empty commit on the new branch
+//
+// Returns an error if:
+//   - Branch name is invalid
+//   - Branch already exists
+//   - Not in a git repository
+//   - Git command fails
 func (g *Git) CreateBranch(name string, createCommit bool) error {
 	// Create and checkout branch
 	_, err := g.execGit("checkout", "-b", name)
@@ -592,7 +626,15 @@ func (g *Git) CreateBranch(name string, createCommit bool) error {
 	return nil
 }
 
-// PushBranch pushes a branch to the remote
+// PushBranch pushes a local branch to the remote repository.
+// Parameters:
+//   - name: The name of the branch to push
+//
+// Returns an error if:
+//   - Branch doesn't exist locally
+//   - Authentication fails
+//   - Remote access fails
+//   - Git command fails
 func (g *Git) PushBranch(name string) error {
 	_, err := g.execGit("push", "-u", "origin", name)
 	if err != nil {
@@ -601,7 +643,14 @@ func (g *Git) PushBranch(name string) error {
 	return nil
 }
 
-// CheckoutBranch checks out a branch
+// CheckoutBranch checks out the specified git branch.
+// Parameters:
+//   - name: The name of the branch to checkout
+//
+// Returns an error if:
+//   - Branch doesn't exist
+//   - Working directory is not clean
+//   - Git command fails
 func (g *Git) CheckoutBranch(name string) error {
 	_, err := g.execGit("checkout", name)
 	if err != nil {
