@@ -11,7 +11,6 @@ A powerful CLI tool for managing Git branches with features for safe deletion, i
 - 🎨 Color-coded output for better visibility
 - 🔒 Protected branches configuration
 - 🔄 Remote branch handling
-- 🚦 Dry-run mode for safety
 
 ## Installation
 
