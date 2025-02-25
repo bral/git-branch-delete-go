@@ -18,7 +18,11 @@ A powerful CLI tool for managing Git branches with features for safe deletion, i
 ### Using Go
 
 ```bash
+# Install the latest version
 go install github.com/bral/git-branch-delete-go@latest
+
+# Install specific version
+go install github.com/bral/git-branch-delete-go@v2.0.1
 ```
 
 ### From Release

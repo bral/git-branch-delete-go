@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.1] - 2024-02-25
+
 ### Added
 
 - Simple UI implementation for branch selection and deletion confirmation
@@ -52,4 +54,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Protected environment variable handling
 - Authentication error handling with helpful messages
 
-[Unreleased]: https://github.com/bral/git-branch-delete-go/compare/v0.0.0...HEAD
+[Unreleased]: https://github.com/bral/git-branch-delete-go/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/bral/git-branch-delete-go/compare/v1.0.0...v2.0.1

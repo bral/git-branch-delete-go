@@ -15,7 +15,11 @@ Welcome to the git-branch-delete documentation! This tool helps you manage Git b
 1. Installation:
 
 ```bash
+# Install the latest version
 go install github.com/bral/git-branch-delete-go@latest
+
+# Install specific version
+go install github.com/bral/git-branch-delete-go@v2.0.1
 ```
 
 2. Basic Usage:
