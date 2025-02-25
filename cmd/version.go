@@ -27,3 +27,7 @@ Shows the version, commit hash, build date, and Go version used to build the bin
 		fmt.Printf("Version: %s\nCommit: %s\nBuilt: %s\n", Version, CommitSHA, BuildTime)
 	},
 }
+
+func runVersion(_ *cobra.Command, _ []string) {
+	fmt.Printf("Version: %s\nCommit: %s\nBuilt: %s\n", Version, CommitSHA, BuildTime)
+}

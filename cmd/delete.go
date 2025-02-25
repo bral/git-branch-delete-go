@@ -38,7 +38,7 @@ Safely handles branch deletion with checks for unmerged changes.`,
 	}
 }
 
-func runDelete(cmd *cobra.Command, args []string) error {
+func runDelete(_ *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("branch name required")
 	}

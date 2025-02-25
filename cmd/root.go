@@ -18,7 +18,7 @@ var rootCmd = &cobra.Command{
 	Short: "A tool for managing Git branches",
 	Long: `git-branch-delete is a CLI tool for managing Git branches.
 It provides features for listing, deleting, and pruning branches.`,
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+	PersistentPreRun: func(_ *cobra.Command, _ []string) {
 		if quietFlag {
 			log.SetQuiet(true)
 		} else if debugFlag {

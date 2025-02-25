@@ -33,7 +33,7 @@ By default, asks for confirmation before deleting.`,
 	}
 }
 
-func runPrune(cmd *cobra.Command, args []string) error {
+func runPrune(_ *cobra.Command, _ []string) error {
 	log.Debug("Starting branch pruning")
 
 	// Get current directory

@@ -38,7 +38,7 @@ Shows local branches by default.`,
 	}
 }
 
-func runList(cmd *cobra.Command, args []string) error {
+func runList(_ *cobra.Command, _ []string) error {
 	log.Debug("Starting branch listing")
 
 	// Get current directory

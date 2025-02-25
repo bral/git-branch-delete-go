@@ -35,7 +35,7 @@ Shows a list of branches with their status and allows selecting multiple branche
 	}
 }
 
-func runInteractive(cmd *cobra.Command, args []string) error {
+func runInteractive(_ *cobra.Command, _ []string) error {
 	dir, err := os.Getwd()
 	if err != nil {
 		log.Error("Failed to get current directory: %v", err)

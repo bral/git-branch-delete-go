@@ -71,12 +71,12 @@ func Load() (*Config, error) {
 	}
 
 	// Check file permissions
-	if info.Mode().Perm()&0077 != 0 {
-		return nil, fmt.Errorf("config file has unsafe permissions: %s", configPath)
+	if info.Mode().Perm()&0o077 != 0 {
+		return nil, fmt.Errorf("config file has too-broad permissions %#o (should be 0600)", info.Mode().Perm())
 	}
 
 	// Open file with restricted permissions
-	f, err := os.OpenFile(configPath, os.O_RDONLY, 0600)
+	f, err := os.OpenFile(configPath, os.O_RDONLY, 0o600)
 	if err != nil {
 		return DefaultConfig(), fmt.Errorf("failed to open config: %w", err)
 	}
@@ -109,7 +109,7 @@ func (c *Config) Save() error {
 
 	// Create config directory if it doesn't exist
 	configDir := filepath.Dir(configPath)
-	if err := os.MkdirAll(configDir, 0700); err != nil {
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
@@ -122,7 +122,7 @@ func (c *Config) Save() error {
 	defer os.Remove(tmpPath) // Clean up in case of error
 
 	// Set restrictive permissions
-	if err := tmpFile.Chmod(0600); err != nil {
+	if err := tmpFile.Chmod(0o600); err != nil {
 		tmpFile.Close()
 		return fmt.Errorf("failed to set file permissions: %w", err)
 	}
