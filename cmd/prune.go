@@ -34,66 +34,102 @@ By default, asks for confirmation before deleting.`,
 }
 
 func runPrune(cmd *cobra.Command, args []string) error {
-	wd, err := os.Getwd()
+	log.Debug("Starting branch pruning")
+
+	// Get current directory
+	dir, err := os.Getwd()
 	if err != nil {
+		log.Error("Failed to get current directory", "error", err)
 		return err
 	}
 
-	g, err := git.New(wd)
+	// Initialize git client
+	gitClient, err := git.New(dir)
 	if err != nil {
-		return fmt.Errorf("failed to initialize git: %w", err)
-	}
-
-	branches, err := g.ListBranches()
-	if err != nil {
+		log.Error("Failed to initialize git client", "error", err)
 		return err
 	}
 
+	// Get branches
+	branches, err := gitClient.ListBranches()
+	if err != nil {
+		log.Error("Failed to list branches", "error", err)
+		return err
+	}
+
+	log.Debug("Retrieved branches", "count", len(branches))
+
+	// Filter stale branches
 	var staleBranches []git.GitBranch
-	for _, b := range branches {
-		if b.IsStale && !b.IsCurrent && !b.IsDefault {
-			staleBranches = append(staleBranches, b)
+	for _, branch := range branches {
+		if branch.IsStale && !branch.IsDefault && !branch.IsCurrent {
+			staleBranches = append(staleBranches, branch)
 		}
 	}
+
+	log.Debug("Found stale branches", "count", len(staleBranches))
 
 	if len(staleBranches) == 0 {
 		log.Info("No stale branches found")
 		return nil
 	}
 
-	log.Info("Found %d stale branches:", len(staleBranches))
-	for _, b := range staleBranches {
-		log.Info("  %s", b.Name)
-	}
-
+	// If not force mode, confirm deletion
 	if !pruneForce {
-		var confirm bool
-		prompt := &survey.Confirm{
-			Message: fmt.Sprintf("Delete %d stale branches?", len(staleBranches)),
+		var selectedBranches []string
+		prompt := &survey.MultiSelect{
+			Message: "Select branches to delete:",
+			Options: func() []string {
+				options := make([]string, len(staleBranches))
+				for i, b := range staleBranches {
+					options[i] = fmt.Sprintf("%s (%s)", b.Name, b.CommitHash)
+				}
+				return options
+			}(),
 		}
 
-		err = survey.AskOne(prompt, &confirm)
-		if err != nil {
-			return fmt.Errorf("failed to get confirmation: %w", err)
+		if err := survey.AskOne(prompt, &selectedBranches); err != nil {
+			log.Error("Failed to get user input", "error", err)
+			return err
 		}
 
-		if !confirm {
-			log.Info("Operation cancelled")
+		if len(selectedBranches) == 0 {
+			log.Info("No branches selected for deletion")
 			return nil
 		}
+
+		// Map selected options back to branch names
+		staleBranches = func() []git.GitBranch {
+			selected := make([]git.GitBranch, 0, len(selectedBranches))
+			for _, opt := range selectedBranches {
+				for _, b := range staleBranches {
+					if fmt.Sprintf("%s (%s)", b.Name, b.CommitHash) == opt {
+						selected = append(selected, b)
+						break
+					}
+				}
+			}
+			return selected
+		}()
 	}
 
-	for _, b := range staleBranches {
-		log.Info("Deleting branch: %s", b.Name)
+	// Delete selected branches
+	for _, branch := range staleBranches {
+		log.Info("Deleting branch", "branch", branch.Name)
 
-		err := g.DeleteBranch(b.Name, true, b.IsRemote)
-		if err != nil {
-			log.Error("Failed to delete branch %s: %v", b.Name, err)
+		if cfg.DryRun {
+			log.Info("Would delete branch (dry run)", "branch", branch.Name)
 			continue
 		}
 
-		log.Success("Deleted branch: %s", b.Name)
+		if err := gitClient.DeleteBranch(branch.Name, true, false); err != nil {
+			log.Error("Failed to delete branch", "branch", branch.Name, "error", err)
+			return err
+		}
+
+		log.Info("Successfully deleted branch", "branch", branch.Name)
 	}
 
+	log.Info("Branch pruning completed", "deleted", len(staleBranches))
 	return nil
 }

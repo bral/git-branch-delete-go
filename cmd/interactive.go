@@ -1,12 +1,16 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/AlecAivazis/survey/v2"
+	"github.com/AlecAivazis/survey/v2/terminal"
 	"github.com/bral/git-branch-delete-go/internal/git"
 	"github.com/bral/git-branch-delete-go/internal/log"
 	"github.com/briandowns/spinner"
@@ -17,6 +21,14 @@ import (
 var (
 	interactiveForce bool
 	interactiveAll   bool
+)
+
+// Add constants for better maintainability
+const (
+	maxDisplayBranches = 5
+	timePerBranchDelete = 30 * time.Second
+	maxBranchesWarningThreshold = 10
+	spinnerUpdateInterval = 100 * time.Millisecond
 )
 
 func init() {
@@ -48,34 +60,40 @@ Note:
 }
 
 func runInteractive(cmd *cobra.Command, args []string) error {
+	// Validate no args were provided
+	if len(args) > 0 {
+		return fmt.Errorf("unexpected arguments: %v", args)
+	}
+
 	// Show loading spinner
-	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
+	s := spinner.New(spinner.CharSets[14], spinnerUpdateInterval)
 	s.Prefix = "Loading branches "
 	s.Start()
+	defer s.Stop() // Ensure spinner stops even on error
 
+	// Get working directory
 	wd, err := os.Getwd()
 	if err != nil {
-		s.Stop()
-		return err
+		return fmt.Errorf("failed to get working directory: %w", err)
 	}
 
+	// Initialize git with cleanup
 	g, err := git.New(wd)
 	if err != nil {
-		s.Stop()
-		return fmt.Errorf("failed to initialize git: %w", err)
+		return fmt.Errorf("failed to initialize git in %s: %w", wd, err)
 	}
 
+	// List branches with proper error context
 	branches, err := g.ListBranches()
 	if err != nil {
-		s.Stop()
-		return err
+		return fmt.Errorf("failed to list branches: %w", err)
 	}
 
 	s.Stop()
 
-	// Filter and prepare branches for selection
-	var choices []string
-	branchMap := make(map[string]git.GitBranch)
+	// Pre-allocate slices with expected capacity
+	choices := make([]string, 0, len(branches))
+	branchMap := make(map[string]git.GitBranch, len(branches))
 
 	for _, b := range branches {
 		// Skip current and protected branches
@@ -186,7 +204,11 @@ func runInteractive(cmd *cobra.Command, args []string) error {
 
 	err = survey.AskOne(prompt, &selected, survey.WithPageSize(15))
 	if err != nil {
-		return fmt.Errorf("failed to get user input: %w", err)
+		if err == terminal.InterruptErr {
+			log.Info("Operation cancelled by user")
+			return nil
+		}
+		return fmt.Errorf("failed to get branch selection: %w", err)
 	}
 
 	if len(selected) == 0 {
@@ -242,6 +264,26 @@ func runInteractive(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("cannot delete unmerged branches without --force")
 	}
 
+	// Safety check: don't allow deleting all branches
+	if len(selectedBranches) >= len(branches)-1 {
+		log.Warn("Cannot delete all branches, at least one branch must remain")
+		return fmt.Errorf("refusing to delete all branches")
+	}
+
+	// Safety check: warn about large deletions
+	if len(selectedBranches) > 10 {
+		log.Warn("You are about to delete %d branches. This is a large operation.", len(selectedBranches))
+		var proceed bool
+		proceedPrompt := &survey.Confirm{
+			Message: "Are you sure you want to proceed?",
+			Default: false,
+		}
+		if err := survey.AskOne(proceedPrompt, &proceed); err != nil || !proceed {
+			log.Info("Operation cancelled")
+			return nil
+		}
+	}
+
 	// Confirm deletion with counts
 	confirmMsg := fmt.Sprintf("Delete %d branches (%d local, %d remote)?", len(selected), localCount, remoteCount)
 	if interactiveForce {
@@ -256,6 +298,10 @@ func runInteractive(cmd *cobra.Command, args []string) error {
 
 	err = survey.AskOne(confirmPrompt, &confirm)
 	if err != nil {
+		if err == terminal.InterruptErr {
+			log.Info("Operation cancelled by user")
+			return nil
+		}
 		return fmt.Errorf("failed to get confirmation: %w", err)
 	}
 
@@ -271,30 +317,80 @@ func runInteractive(cmd *cobra.Command, args []string) error {
 	spinner.Suffix = fmt.Sprintf(" Deleting branches (0/%d)", len(selectedBranches))
 	spinner.Start()
 
+	// Use a buffered channel for parallel branch deletion with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	type deleteResult struct {
+		branch string
+		err    error
+	}
+	results := make(chan deleteResult, len(selectedBranches))
+
+	// Process branches in parallel with a worker pool
+	const maxWorkers = 4
+	sem := make(chan struct{}, maxWorkers)
+	var wg sync.WaitGroup
+
 	for _, branch := range selectedBranches {
-		err := g.DeleteBranch(branch.Name, interactiveForce, branch.IsRemote)
-		if err != nil {
-			failCount++
-			log.Error("Failed to delete %s: %s", branch.Name, err)
-		} else {
-			successCount++
+		wg.Add(1)
+		go func(b git.GitBranch) {
+			defer wg.Done()
+			defer func() { <-sem }() // Release semaphore
+
+			select {
+			case sem <- struct{}{}: // Acquire semaphore
+				err := g.DeleteBranch(b.Name, interactiveForce, b.IsRemote)
+				results <- deleteResult{branch: b.Name, err: err}
+			case <-ctx.Done():
+				results <- deleteResult{branch: b.Name, err: ctx.Err()}
+			}
+		}(branch)
+	}
+
+	// Wait for all workers in a separate goroutine
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Collect results with timeout
+	var errs []string
+	for i := 0; i < len(selectedBranches); i++ {
+		select {
+		case result, ok := <-results:
+			if !ok {
+				break
+			}
+			if result.err != nil {
+				failCount++
+				errs = append(errs, fmt.Sprintf("%s: %s", result.branch, result.err))
+			} else {
+				successCount++
+			}
+			spinner.Suffix = fmt.Sprintf(" Deleting branches (%d/%d)", successCount+failCount, len(selectedBranches))
+		case <-ctx.Done():
+			log.Error("Operation timed out after 30 seconds")
+			return ctx.Err()
 		}
-		spinner.Suffix = fmt.Sprintf(" Deleting branches (%d/%d)", successCount, len(selectedBranches))
 	}
 
 	spinner.Stop()
 
-	// Show final summary
+	// Show final summary with detailed errors if any
 	fmt.Printf("\nDeleted %d branches successfully", successCount)
 	if failCount > 0 {
 		fmt.Printf(", %d failed", failCount)
+		fmt.Println("\nFailed branches:")
+		for _, err := range errs {
+			fmt.Printf("  - %s\n", err)
+		}
 	}
 	fmt.Println()
 
 	// Calculate and show time saved
 	if successCount > 0 {
-		timePerBranch := 30 * time.Second
-		timeSaved := time.Duration(successCount) * timePerBranch
+		timeSaved := time.Duration(successCount) * timePerBranchDelete
 		minutes := int(timeSaved.Minutes())
 		seconds := int(timeSaved.Seconds()) % 60
 
@@ -314,5 +410,50 @@ func runInteractive(cmd *cobra.Command, args []string) error {
 // - Then merged branches
 // - Remote branches last in each category
 func sortBranchChoices(choices []string) {
-	// Implementation left as is - can be added if needed
+	type branchScore struct {
+		index int
+		score int
+		value string
+	}
+
+	scores := make([]branchScore, len(choices))
+	for i, choice := range choices {
+		score := 0
+
+		// Priority scoring (higher is more important)
+		switch {
+		case strings.Contains(choice, color.RedString("stale")):
+			score += 8000
+		case strings.Contains(choice, color.YellowString("unmerged")):
+			score += 4000
+		case strings.Contains(choice, color.GreenString("merged")):
+			score += 2000
+		}
+
+		// Deprioritize remote branches within their categories
+		if strings.Contains(choice, color.BlueString("[remote]")) {
+			score -= 1000
+		}
+
+		// Use original index as tiebreaker for stable sort
+		score = score*10000 + (10000 - i)
+
+		scores[i] = branchScore{
+			index: i,
+			score: score,
+			value: choice,
+		}
+	}
+
+	// Sort by score descending
+	sort.Slice(scores, func(i, j int) bool {
+		return scores[i].score > scores[j].score
+	})
+
+	// Update choices array in place
+	sorted := make([]string, len(choices))
+	for i, s := range scores {
+		sorted[i] = s.value
+	}
+	copy(choices, sorted)
 }

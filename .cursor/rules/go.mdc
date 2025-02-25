@@ -17,6 +17,7 @@ General Principles
 - Write clear, maintainable, and well-documented code
 - Implement proper error handling and user feedback
 - Follow the Unix philosophy: do one thing well, handle text streams, be composable
+- Always be sure that any changes you make will build
 
 Code Style and Structure
 - Follow standard Go formatting and naming conventions

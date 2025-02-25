@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -70,17 +71,7 @@ func (g *Git) execGit(args ...string) (string, error) {
 			continue
 		}
 		if err := ValidateGitArg(arg); err != nil {
-			return "", fmt.Errorf("invalid git argument: %w", err)
-		}
-	}
-
-	// Validate all branch name arguments
-	for _, arg := range args {
-		if strings.HasPrefix(arg, "refs/heads/") || strings.HasPrefix(arg, "refs/remotes/") {
-			branchName := strings.TrimPrefix(strings.TrimPrefix(arg, "refs/heads/"), "refs/remotes/")
-			if err := ValidateBranchName(branchName); err != nil {
-				return "", fmt.Errorf("invalid branch name: %w", err)
-			}
+			return "", newInvalidBranchError(arg, err.Error())
 		}
 	}
 
@@ -93,45 +84,71 @@ func (g *Git) execGit(args ...string) (string, error) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	// Set minimal secure environment
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get home directory: %w", err)
+	// Always set stdin to prevent hanging
+	cmd.Stdin = os.Stdin
+
+	// Get existing environment
+	env := os.Environ()
+
+	// Filter and append our specific git environment variables
+	filteredEnv := make([]string, 0, len(env))
+	for _, e := range env {
+		// Keep important environment variables
+		if strings.HasPrefix(e, "HOME=") ||
+			strings.HasPrefix(e, "PATH=") ||
+			strings.HasPrefix(e, "SSH_") ||
+			strings.HasPrefix(e, "GIT_") || // Keep all existing GIT_* variables
+			strings.HasPrefix(e, "XDG_CONFIG_HOME=") ||
+			strings.HasPrefix(e, "TERM=") {
+			filteredEnv = append(filteredEnv, e)
+		}
 	}
 
-	cmd.Env = []string{
-		"HOME=" + home,
-		"GIT_TERMINAL_PROMPT=0", // Disable git credential prompting
-		"GIT_ASKPASS=", // Disable password prompting
-		"GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=yes", // Enforce SSH key checking
-		"LC_ALL=C", // Use consistent locale
-		"GIT_CONFIG_NOSYSTEM=1", // Ignore system config
-		"GIT_FLUSH=1", // Disable output buffering
-		"GIT_PROTOCOL=version=2", // Use Git protocol v2
-		"GIT_TRACE_PACK_ACCESS=", // Disable pack tracing
-		"GIT_TRACE_PACKET=", // Disable packet tracing
-		"GIT_TRACE=", // Disable general tracing
+	// Append our git-specific environment variables
+	gitEnv := []string{
+		"GIT_TERMINAL_PROMPT=1",     // Always enable terminal prompts
+		"GIT_CONFIG_NOSYSTEM=1",     // Ignore system config
+		"GIT_FLUSH=1",               // Disable output buffering
+		"GIT_PROTOCOL=version=2",    // Use Git protocol v2
+		"GIT_TRACE_PACK_ACCESS=",    // Disable pack tracing
+		"GIT_TRACE_PACKET=",         // Disable packet tracing
+		"GIT_TRACE=",                // Disable general tracing
+		"LC_ALL=C",                  // Use consistent locale
 	}
+
+	cmd.Env = append(filteredEnv, gitEnv...)
 
 	// Execute command with timeout
-	err = cmd.Run()
+	err := cmd.Run()
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			return "", fmt.Errorf("git command timed out after %v", g.timeout)
+			return "", newTimeoutError(strings.Join(args, " "), g.timeout.String())
 		}
-		return "", fmt.Errorf("git command failed: %s: %w", stderr.String(), err)
+		return "", newGitCommandError(strings.Join(args, " "), stderr.String(), err)
 	}
 
 	// Validate output for potential command injection
 	output := stdout.String()
 	if strings.ContainsAny(output, "\x00\x07\x1B\x9B") {
-		return "", fmt.Errorf("git output contains invalid characters")
+		return "", newGitCommandError(strings.Join(args, " "), output, fmt.Errorf("output contains invalid characters"))
 	}
 
 	return strings.TrimSpace(output), nil
 }
 
-// GitBranch represents a git branch
+// execGitQuiet executes a git command without validation for internal use
+func (g *Git) execGitQuiet(args ...string) (string, error) {
+	cmd := exec.Command(g.gitPath, args...)
+	cmd.Dir = g.workDir
+	cmd.Stdin = os.Stdin  // Prevent hanging
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// GitBranch represents a git branch and its metadata
 type GitBranch struct {
 	Name       string
 	CommitHash string
@@ -141,43 +158,112 @@ type GitBranch struct {
 	IsDefault  bool
 	IsMerged   bool
 	IsStale    bool
+	IsBehind   bool
 	Message    string
+}
+
+// execGitWithStdout executes a git command and returns its stdout pipe
+func (g *Git) execGitWithStdout(args ...string) (*exec.Cmd, io.ReadCloser, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), g.timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, g.gitPath, args...)
+	cmd.Dir = g.workDir
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin  // Prevent hanging
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create stdout pipe: %w", err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		return nil, nil, fmt.Errorf("failed to start command: %w", err)
+	}
+
+	return cmd, stdout, nil
+}
+
+// ParseBranchLine parses a line of branch information from git for-each-ref
+func (g *Git) ParseBranchLine(line string) (GitBranch, error) {
+	parts := strings.Fields(line)
+	if len(parts) < 2 {
+		return GitBranch{}, fmt.Errorf("invalid branch line format: %s", line)
+	}
+
+	refName := parts[0]
+	commitHash := parts[1]
+
+	var trackingInfo string
+	if len(parts) > 2 {
+		trackingInfo = strings.Join(parts[2:], " ")
+	}
+
+	branch := GitBranch{
+		Name:       strings.TrimPrefix(strings.TrimPrefix(refName, "refs/heads/"), "refs/remotes/"),
+		CommitHash: commitHash,
+		Reference:  refName,
+		IsRemote:   strings.HasPrefix(refName, "refs/remotes/"),
+		IsDefault:  g.isDefaultBranch(refName),
+	}
+
+	// Parse tracking info
+	if strings.Contains(trackingInfo, "behind") {
+		branch.IsBehind = true
+	}
+	if strings.Contains(trackingInfo, "gone") {
+		branch.IsStale = true
+	}
+
+	return branch, nil
+}
+
+// isDefaultBranch checks if the given ref is a default branch (main/master)
+func (g *Git) isDefaultBranch(ref string) bool {
+	defaultBranches := []string{"refs/heads/main", "refs/heads/master"}
+	for _, defaultBranch := range defaultBranches {
+		if ref == defaultBranch {
+			return true
+		}
+	}
+	return false
 }
 
 // DeleteBranch deletes a git branch
 func (g *Git) DeleteBranch(name string, force bool, remote bool) error {
 	// Validate branch name
 	if err := ValidateBranchName(name); err != nil {
-		return fmt.Errorf("invalid branch name: %w", err)
+		return newInvalidBranchError(name, err.Error())
 	}
 
 	// Don't allow deletion of protected branches
 	if isProtectedBranch(name) {
-		return fmt.Errorf("cannot delete protected branch: %s", name)
+		return newProtectedBranchError(name)
 	}
 
 	// Verify branch exists before attempting deletion
 	exists, err := g.branchExists(name, remote)
 	if err != nil {
-		return fmt.Errorf("failed to check branch: %w", err)
+		return newGitCommandError("branch exists check", "", err)
 	}
 	if !exists {
-		return fmt.Errorf("branch does not exist: %s", name)
+		return newInvalidBranchError(name, "branch does not exist")
 	}
 
 	// Check if branch is fully merged if not force deleting
 	if !force && !remote {
 		merged, err := g.isBranchMerged(name)
 		if err != nil {
-			return fmt.Errorf("failed to check if branch is merged: %w", err)
+			return newGitCommandError("merge check", "", err)
 		}
 		if !merged {
-			return fmt.Errorf("branch %s is not fully merged", name)
+			return newUnmergedBranchError(name)
 		}
 	}
 
 	var args []string
 	if remote {
+		// For remote branches, use push --delete
 		args = []string{"push", "origin", "--delete", name}
 	} else {
 		if force {
@@ -187,6 +273,35 @@ func (g *Git) DeleteBranch(name string, force bool, remote bool) error {
 		}
 	}
 
+	if remote {
+		// For remote operations, use standard git command with proper error handling
+		cmd := exec.Command(g.gitPath, args...)
+		cmd.Dir = g.workDir
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		err := cmd.Run()
+		if err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				errStr := string(exitErr.Stderr)
+				if strings.Contains(errStr, "could not read Username") ||
+				   strings.Contains(errStr, "Authentication failed") {
+					return fmt.Errorf("authentication failed. For HTTPS, run: git config --global credential.helper store\nFor SSH, ensure your SSH key is added to GitHub")
+				}
+				if strings.Contains(errStr, "Permission denied") {
+					return fmt.Errorf("permission denied. Please check your credentials and repository permissions")
+				}
+				if strings.Contains(errStr, "remote rejected") {
+					return fmt.Errorf("remote rejected deletion of branch '%s'. Check if you have write access to the repository", name)
+				}
+			}
+			return fmt.Errorf("failed to delete remote branch: %w", err)
+		}
+		return nil
+	}
+
+	// For local branches, use regular execGit
 	_, err = g.execGit(args...)
 	return err
 }

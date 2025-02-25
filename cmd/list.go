@@ -39,96 +39,86 @@ Shows local branches by default.`,
 }
 
 func runList(cmd *cobra.Command, args []string) error {
-	wd, err := os.Getwd()
+	log.Debug("Starting branch listing")
+
+	// Get current directory
+	dir, err := os.Getwd()
 	if err != nil {
+		log.Error("Failed to get current directory", "error", err)
 		return err
 	}
 
-	g, err := git.New(wd)
+	// Initialize git client
+	gitClient, err := git.New(dir)
 	if err != nil {
-		return fmt.Errorf("failed to initialize git: %w", err)
-	}
-
-	branches, err := g.ListBranches()
-	if err != nil {
+		log.Error("Failed to initialize git client", "error", err)
 		return err
 	}
+
+	// Get branches
+	branches, err := gitClient.ListBranches()
+	if err != nil {
+		log.Error("Failed to list branches", "error", err)
+		return err
+	}
+
+	log.Debug("Retrieved branches", "count", len(branches))
 
 	// Filter branches based on flags
 	var filteredBranches []git.GitBranch
-	for _, b := range branches {
-		if !showAll {
-			if showRemote && !b.IsRemote {
-				continue
-			}
-			if !showRemote && b.IsRemote {
-				continue
-			}
+	for _, branch := range branches {
+		if showAll ||
+		   (showRemote && branch.IsRemote) ||
+		   (!showRemote && !branch.IsRemote) {
+			filteredBranches = append(filteredBranches, branch)
 		}
-		filteredBranches = append(filteredBranches, b)
 	}
 
+	log.Debug("Filtered branches", "count", len(filteredBranches))
+
 	if len(filteredBranches) == 0 {
-		if showRemote {
-			log.Info("No remote branches found")
-		} else if showAll {
-			log.Info("No branches found")
-		} else {
-			log.Info("No local branches found")
-		}
+		log.Info("No branches found matching criteria")
 		return nil
 	}
 
-	// Set up tabwriter for aligned output
+	// Create tabwriter for aligned output
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	defer w.Flush()
-
-	// Print header
-	log.Info("Found %d branches:", len(filteredBranches))
+	fmt.Fprintln(w, "Branch\tCommit\tStatus\tMessage")
+	fmt.Fprintln(w, "------\t------\t------\t-------")
 
 	for _, branch := range filteredBranches {
-		// Format branch name
-		prefix := "  "
+		status := []string{}
 		if branch.IsCurrent {
-			prefix = color.GreenString("* ")
+			status = append(status, color.GreenString("current"))
 		}
-		name := prefix + branch.Name
-
-		// Add indicators
-		var indicators []string
 		if branch.IsDefault {
-			indicators = append(indicators, color.YellowString("default"))
-		}
-		if branch.IsRemote {
-			indicators = append(indicators, color.BlueString("remote"))
-		}
-		if branch.IsStale {
-			indicators = append(indicators, color.RedString("stale"))
+			status = append(status, color.BlueString("default"))
 		}
 		if branch.IsMerged {
-			indicators = append(indicators, color.GreenString("merged"))
+			status = append(status, color.YellowString("merged"))
+		}
+		if branch.IsStale {
+			status = append(status, color.RedString("stale"))
 		}
 
-		status := ""
-		if len(indicators) > 0 {
-			status = "\t(" + strings.Join(indicators, ", ") + ")"
+		statusStr := strings.Join(status, ", ")
+		if statusStr == "" {
+			statusStr = "-"
 		}
 
-		// Add commit info if available
-		commitInfo := ""
-		if branch.CommitHash != "" {
-			shortHash := branch.CommitHash
-			if len(shortHash) > 7 {
-				shortHash = shortHash[:7]
-			}
-			commitInfo = "\t" + shortHash
-			if branch.Message != "" {
-				commitInfo += "\t" + branch.Message
-			}
-		}
-
-		log.Info("%s%s%s", name, status, commitInfo)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
+			branch.Name,
+			branch.CommitHash,
+			statusStr,
+			branch.Message,
+		)
 	}
 
+	if err := w.Flush(); err != nil {
+		log.Error("Failed to flush output", "error", err)
+		return err
+	}
+
+	log.Debug("Successfully listed branches")
 	return nil
 }

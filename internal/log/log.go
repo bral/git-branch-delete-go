@@ -1,146 +1,127 @@
 package log
 
 import (
-	"fmt"
+	"io"
 	"os"
-	"path/filepath"
-	"runtime"
-	"strings"
-	"sync"
 	"time"
+
+	"github.com/rs/zerolog"
 )
 
 var (
-	quiet     bool
-	debug     bool
-	logFile   *os.File
-	logMu     sync.Mutex
-	startTime = time.Now()
+	globalLogger zerolog.Logger
 )
 
-const (
-	levelInfo    = "INFO"
-	levelError   = "ERROR"
-	levelDebug   = "DEBUG"
-	levelSuccess = "SUCCESS"
-)
-
-// Init initializes the logger with an optional log file
-func Init(logPath string) error {
-	if logPath != "" {
-		// Create log directory if it doesn't exist
-		logDir := filepath.Dir(logPath)
-		if err := os.MkdirAll(logDir, 0700); err != nil {
-			return fmt.Errorf("failed to create log directory: %w", err)
-		}
-
-		// Open log file with restricted permissions
-		f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
-		if err != nil {
-			return fmt.Errorf("failed to open log file: %w", err)
-		}
-
-		logFile = f
-	}
-	return nil
-}
-
-// Close closes the log file if it's open
-func Close() error {
-	if logFile != nil {
-		return logFile.Close()
-	}
-	return nil
-}
-
-// SetQuiet sets the quiet mode
-func SetQuiet(q bool) {
-	quiet = q
-}
-
-// SetDebug sets the debug mode
-func SetDebug(d bool) {
-	debug = d
-}
-
-// log writes a log message with the given level
-func log(level, format string, args ...interface{}) {
-	logMu.Lock()
-	defer logMu.Unlock()
-
-	// Get caller information
-	_, file, line, ok := runtime.Caller(2)
-	if !ok {
-		file = "unknown"
-		line = 0
-	}
-	file = filepath.Base(file)
-
-	// Format message
-	msg := fmt.Sprintf(format, args...)
-
-	// Sanitize message for logging
-	msg = sanitizeLogMessage(msg)
-
-	// Create log entry
-	timestamp := time.Now().Format("2006-01-02 15:04:05.000")
-	elapsed := time.Since(startTime).Round(time.Millisecond)
-	entry := fmt.Sprintf("%s [%s] (%s:%d) [%s] %s\n",
-		timestamp, level, file, line, elapsed, msg)
-
-	// Write to log file if configured
-	if logFile != nil {
-		if _, err := logFile.WriteString(entry); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to write to log file: %v\n", err)
-		}
+func init() {
+	// Set up console writer with color support
+	output := zerolog.ConsoleWriter{
+		Out:        os.Stdout,
+		TimeFormat: time.RFC3339,
+		NoColor:    false,
 	}
 
-	// Write to stdout/stderr unless in quiet mode
-	if !quiet || level == levelError {
-		if level == levelError {
-			fmt.Fprint(os.Stderr, entry)
-		} else {
-			fmt.Print(entry)
-		}
+	// Initialize logger with console writer
+	globalLogger = zerolog.New(output).With().Timestamp().Logger()
+
+	// Set default level to info
+	zerolog.SetGlobalLevel(zerolog.InfoLevel)
+}
+
+// SetLevel sets the logging level
+func SetLevel(level string) {
+	switch level {
+	case "trace":
+		zerolog.SetGlobalLevel(zerolog.TraceLevel)
+	case "debug":
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	case "info":
+		zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	case "warn":
+		zerolog.SetGlobalLevel(zerolog.WarnLevel)
+	case "error":
+		zerolog.SetGlobalLevel(zerolog.ErrorLevel)
+	case "fatal":
+		zerolog.SetGlobalLevel(zerolog.FatalLevel)
+	case "panic":
+		zerolog.SetGlobalLevel(zerolog.PanicLevel)
+	default:
+		zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	}
 }
 
-// sanitizeLogMessage removes sensitive information from log messages
-func sanitizeLogMessage(msg string) string {
-	// Remove potential sensitive information
-	sensitivePatterns := []string{
-		`password=[\S]+`,
-		`token=[\S]+`,
-		`key=[\S]+`,
-		`secret=[\S]+`,
-		`auth=[\S]+`,
+// SetQuiet sets the logger to only show errors
+func SetQuiet(quiet bool) {
+	if quiet {
+		zerolog.SetGlobalLevel(zerolog.ErrorLevel)
+	} else {
+		zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	}
+}
 
-	sanitized := msg
-	for _, pattern := range sensitivePatterns {
-		sanitized = strings.ReplaceAll(sanitized, pattern, "[REDACTED]")
+// SetDebug sets the logger to debug level
+func SetDebug(debug bool) {
+	if debug {
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	} else {
+		zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	}
-	return sanitized
+}
+
+// SetOutput sets the logger output
+func SetOutput(w io.Writer) {
+	globalLogger = zerolog.New(w).With().Timestamp().Logger()
+}
+
+// Trace logs a trace message
+func Trace(msg string, args ...interface{}) {
+	globalLogger.Trace().Msgf(msg, args...)
+}
+
+// Debug logs a debug message
+func Debug(msg string, args ...interface{}) {
+	globalLogger.Debug().Msgf(msg, args...)
 }
 
 // Info logs an info message
-func Info(format string, args ...interface{}) {
-	log(levelInfo, format, args...)
+func Info(msg string, args ...interface{}) {
+	globalLogger.Info().Msgf(msg, args...)
+}
+
+// Warn logs a warning message
+func Warn(msg string, args ...interface{}) {
+	globalLogger.Warn().Msgf(msg, args...)
 }
 
 // Error logs an error message
-func Error(format string, args ...interface{}) {
-	log(levelError, format, args...)
+func Error(msg string, args ...interface{}) {
+	globalLogger.Error().Msgf(msg, args...)
 }
 
-// Debug logs a debug message if debug mode is enabled
-func Debug(format string, args ...interface{}) {
-	if debug {
-		log(levelDebug, format, args...)
+// Fatal logs a fatal message and exits
+func Fatal(msg string, args ...interface{}) {
+	globalLogger.Fatal().Msgf(msg, args...)
+}
+
+// Panic logs a panic message and panics
+func Panic(msg string, args ...interface{}) {
+	globalLogger.Panic().Msgf(msg, args...)
+}
+
+// WithField adds a field to the logger and returns a new event
+func WithField(key string, value interface{}) {
+	globalLogger.Info().Interface(key, value).Send()
+}
+
+// WithFields adds multiple fields to the logger and returns a new event
+func WithFields(fields map[string]interface{}) {
+	event := globalLogger.Info()
+	for k, v := range fields {
+		event.Interface(k, v)
 	}
+	event.Send()
 }
 
-// Success logs a success message
-func Success(format string, args ...interface{}) {
-	log(levelSuccess, format, args...)
+// WithError adds an error field to the logger and returns a new event
+func WithError(err error) {
+	globalLogger.Error().Err(err).Send()
 }

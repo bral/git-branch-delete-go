@@ -2,11 +2,74 @@ package git
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"unicode"
 )
 
 var (
+	// Git branch naming rules:
+	// - Cannot start with '.'
+	// - Cannot have double dots '..'
+	// - Cannot have ASCII control characters
+	// - Cannot contain: space, ~, ^, :, ?, *, [, \
+	// - Cannot end with '/'
+	// - Cannot end with '.lock'
+	// Using multiple regexes instead of negative lookahead
+	branchStartDotRegex = regexp.MustCompile(`^\.`)
+	doubleDotRegex     = regexp.MustCompile(`\.\.`)
+	endSlashRegex      = regexp.MustCompile(`/$`)
+	endLockRegex       = regexp.MustCompile(`\.lock$`)
+	validCharsRegex    = regexp.MustCompile(`^[a-zA-Z0-9-/_]+$`)
+
+	// Allowed git command arguments
+	allowedGitArgs = map[string]bool{
+		// Commands
+		"branch":        true,
+		"push":         true,
+		"pull":         true,
+		"fetch":        true,
+		"checkout":     true,
+		"rev-parse":    true,
+		"show-ref":     true,
+		"ls-remote":    true,
+		"for-each-ref": true,
+		"gc":           true,
+		"prune":        true,
+		"pack-refs":    true,
+
+		// Common flags
+		"-c":            true,
+		"-d":            true,
+		"-D":            true,
+		"--delete":      true,
+		"--merged":      true,
+		"--format":      true,
+		"--verify":      true,
+		"--quiet":       true,
+		"--all":         true,
+		"--prune":       true,
+		"--auto":        true,
+		"-r":            true,
+		"--heads":       true,
+		"--abbrev-ref":  true,
+		"--no-contains": true,
+		"--contains":    true,
+		"--sort":        true,
+		"--points-at":   true,
+		"--porcelain":   true,
+		"--progress":    true,
+		"HEAD":          true,
+		"origin":        true,
+	}
+
+	// Dangerous patterns that could be used for command injection
+	dangerousPatterns = []string{
+		";", "&", "|", "`", "$", "(", ")", "<", ">", "\\",
+		"\n", "\r", "\t", "\v", "\f",
+		"../", ".../", "~",
+	}
+
 	// disallowedChars are characters that could be used for command injection
 	disallowedChars = []string{";", "&&", "||", "`", "$", "|", ">", "<", "(", ")", "{", "}", "[", "]", "\"", "'", "\n", "\r"}
 
@@ -44,112 +107,69 @@ var (
 
 // ValidateGitArg validates a git command argument
 func ValidateGitArg(arg string) error {
-	// Allow empty arguments
-	if arg == "" {
+	// Skip validation for specific patterns
+	if strings.HasPrefix(arg, "refs/") ||
+	   strings.HasPrefix(arg, "%(") ||
+	   strings.HasPrefix(arg, "credential.") {
 		return nil
 	}
 
-	// Allow certain safe git flags and options
-	safeFlags := map[string]bool{
-		"--abbrev-ref": true,
-		"--format":     true,
-		"--merged":     true,
-		"--verify":     true,
-		"--quiet":      true,
-		"--heads":      true,
-		"-r":          true,
-		"-d":          true,
-		"-D":          true,
-		"--delete":    true,
+	// Check for dangerous patterns
+	for _, pattern := range dangerousPatterns {
+		if strings.Contains(arg, pattern) {
+			return fmt.Errorf("argument contains dangerous pattern: %s", pattern)
+		}
 	}
 
-	// Check if it's a safe flag
-	if safeFlags[arg] {
+	// Check if it's an allowed argument
+	if strings.HasPrefix(arg, "-") || strings.HasPrefix(arg, "--") {
+		if !allowedGitArgs[arg] {
+			return fmt.Errorf("unsupported git flag: %s", arg)
+		}
 		return nil
 	}
 
-	// Check if it's a format string
-	if strings.HasPrefix(arg, "%(") && strings.HasSuffix(arg, ")") {
+	// If it's a command, check if it's allowed
+	if allowedGitArgs[arg] {
 		return nil
 	}
 
-	// Check if it's a ref path
-	if strings.HasPrefix(arg, "refs/") {
-		return nil
-	}
-
-	// Check if it's HEAD
-	if arg == "HEAD" {
-		return nil
-	}
-
-	// For other arguments, validate as branch name
-	if strings.HasPrefix(arg, "-") {
-		return fmt.Errorf("disallowed git argument: %s", arg)
-	}
-
+	// For branch names and other arguments, validate characters
 	return ValidateBranchName(arg)
 }
 
-// ValidateBranchName checks if a branch name is valid and safe
+// ValidateBranchName validates a git branch name
 func ValidateBranchName(name string) error {
-	// Check for empty name
-	if strings.TrimSpace(name) == "" {
+	// Check length
+	if len(name) == 0 {
 		return fmt.Errorf("branch name cannot be empty")
 	}
+	if len(name) > 255 {
+		return fmt.Errorf("branch name too long (max 255 characters)")
+	}
 
-	// Check for disallowed characters that could be used for command injection
-	for _, char := range disallowedChars {
-		if strings.Contains(name, char) {
-			return fmt.Errorf("branch name contains invalid character: %s", char)
+	// Check for dangerous patterns
+	for _, pattern := range dangerousPatterns {
+		if strings.Contains(name, pattern) {
+			return fmt.Errorf("branch name contains dangerous pattern: %s", pattern)
 		}
 	}
 
-	// Check for invalid sequences
-	for _, seq := range invalidSequences {
-		if strings.Contains(name, seq) {
-			return fmt.Errorf("branch name cannot contain '%s'", seq)
-		}
-	}
-
-	// Check for invalid endings
-	for _, ending := range invalidEndings {
-		if strings.HasSuffix(name, ending) {
-			return fmt.Errorf("branch name cannot end with '%s'", ending)
-		}
-	}
-
-	// Check for invalid beginnings
-	if strings.HasPrefix(name, "-") {
-		return fmt.Errorf("branch name cannot start with '-'")
-	}
-
-	if strings.HasPrefix(name, ".") {
+	// Check branch naming rules
+	if branchStartDotRegex.MatchString(name) {
 		return fmt.Errorf("branch name cannot start with '.'")
 	}
-
-	// Check for control characters and spaces
-	for i, r := range name {
-		if unicode.IsControl(r) || unicode.IsSpace(r) {
-			return fmt.Errorf("branch name contains invalid character at position %d: %q", i+1, r)
-		}
+	if doubleDotRegex.MatchString(name) {
+		return fmt.Errorf("branch name cannot contain '..'")
 	}
-
-	// Check for ASCII control characters explicitly
-	for i, r := range name {
-		if r <= 0x20 || r == 0x7F {
-			return fmt.Errorf("branch name contains control character at position %d: %q", i+1, r)
-		}
+	if endSlashRegex.MatchString(name) {
+		return fmt.Errorf("branch name cannot end with '/'")
 	}
-
-	// Check for consecutive dots
-	if strings.Contains(name, "..") {
-		return fmt.Errorf("branch name cannot contain consecutive dots")
+	if endLockRegex.MatchString(name) {
+		return fmt.Errorf("branch name cannot end with '.lock'")
 	}
-
-	// Check for consecutive slashes
-	if strings.Contains(name, "//") {
-		return fmt.Errorf("branch name cannot contain consecutive slashes")
+	if !validCharsRegex.MatchString(name) {
+		return fmt.Errorf("branch name can only contain letters, numbers, dashes, underscores, and forward slashes")
 	}
 
 	return nil
@@ -158,7 +178,7 @@ func ValidateBranchName(name string) error {
 // SanitizeBranchName removes any potentially dangerous characters from a branch name
 func SanitizeBranchName(name string) string {
 	// Remove any characters that could be used for command injection
-	for _, char := range disallowedChars {
+	for _, char := range dangerousPatterns {
 		name = strings.ReplaceAll(name, char, "")
 	}
 
@@ -180,6 +200,9 @@ func SanitizeBranchName(name string) string {
 
 	// Remove trailing dots and slashes
 	name = strings.TrimRight(name, "./")
+
+	// Replace any remaining invalid characters with dashes
+	name = validCharsRegex.ReplaceAllString(name, "-")
 
 	return strings.TrimSpace(name)
 }

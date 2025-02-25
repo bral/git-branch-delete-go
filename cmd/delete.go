@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/bral/git-branch-delete-go/internal/git"
+	"github.com/bral/git-branch-delete-go/internal/log"
 	"github.com/spf13/cobra"
 )
 
@@ -39,53 +40,50 @@ Safely handles branch deletion with checks for unmerged changes.`,
 
 func runDelete(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("at least one branch name is required")
+		return fmt.Errorf("no branches specified")
 	}
 
-	if all {
-		remote = true
-	}
+	log.Debug("Starting branch deletion", "branches", args)
 
-	wd, err := os.Getwd()
+	// Get current directory
+	dir, err := os.Getwd()
 	if err != nil {
-		return fmt.Errorf("failed to get working directory: %w", err)
+		log.Error("Failed to get current directory", "error", err)
+		return err
 	}
 
-	g, err := git.New(wd)
+	// Initialize git client
+	gitClient, err := git.New(dir)
 	if err != nil {
-		return fmt.Errorf("failed to initialize git: %w", err)
+		log.Error("Failed to initialize git client", "error", err)
+		return err
 	}
 
-	branches, err := g.ListBranches()
-	if err != nil {
-		return fmt.Errorf("failed to list branches: %w", err)
-	}
+	// Process each branch
+	for _, branch := range args {
+		log.Info("Processing branch", "branch", branch)
 
-	for _, branchToDelete := range args {
-		var found bool
-		for _, branch := range branches {
-			if branch.Name == branchToDelete ||
-			   (remote && "origin/"+branchToDelete == branch.Name) {
-				found = true
-
-				if branch.IsDefault {
-					return fmt.Errorf("cannot delete default branch: %s", branch.Name)
-				}
-
-				if branch.IsCurrent {
-					return fmt.Errorf("cannot delete current branch: %s", branch.Name)
-				}
-
-				if err := g.DeleteBranch(branch.Name, force, remote); err != nil {
-					return fmt.Errorf("failed to delete branch %s: %w", branch.Name, err)
-				}
-
-				fmt.Printf("Successfully deleted branch: %s\n", branch.Name)
-			}
+		if cfg.DryRun {
+			log.Info("Would delete branch (dry run)", "branch", branch, "force", force, "remote", remote)
+			continue
 		}
 
-		if !found {
-			return fmt.Errorf("branch not found: %s", branchToDelete)
+		// Delete branch
+		if err := gitClient.DeleteBranch(branch, force, remote); err != nil {
+			log.Error("Failed to delete branch", "branch", branch, "error", err)
+			return err
+		}
+
+		log.Info("Successfully deleted branch", "branch", branch)
+
+		// If --all flag is set, also delete remote branch
+		if all && !remote {
+			log.Info("Deleting remote branch", "branch", branch)
+			if err := gitClient.DeleteBranch(branch, force, true); err != nil {
+				log.Error("Failed to delete remote branch", "branch", branch, "error", err)
+				return err
+			}
+			log.Info("Successfully deleted remote branch", "branch", branch)
 		}
 	}
 

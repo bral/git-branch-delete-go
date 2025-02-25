@@ -14,6 +14,7 @@ var (
 	quietFlag  bool
 	debugFlag  bool
 	dryRunFlag bool
+	logLevel   string
 )
 
 var rootCmd = &cobra.Command{
@@ -22,9 +23,17 @@ var rootCmd = &cobra.Command{
 	Long: `A CLI tool that helps manage and delete Git branches
 safely and efficiently across your repositories.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		// Set up logging first
-		log.SetQuiet(quietFlag)
-		log.SetDebug(debugFlag)
+		// Set up logging first based on flags
+		if quietFlag {
+			log.SetQuiet(true)
+		} else if debugFlag {
+			log.SetDebug(true)
+		} else {
+			log.SetLevel(logLevel)
+		}
+
+		log.Debug("Debug logging enabled")
+		log.Info("Starting git-branch-delete")
 
 		// Load config
 		var err error
@@ -36,6 +45,7 @@ safely and efficiently across your repositories.`,
 		// Override config with flags
 		if dryRunFlag {
 			cfg.DryRun = true
+			log.Info("Dry run mode enabled")
 		}
 
 		return nil
@@ -48,7 +58,8 @@ func Execute() error {
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file path")
-	rootCmd.PersistentFlags().BoolVar(&quietFlag, "quiet", false, "suppress info messages")
+	rootCmd.PersistentFlags().BoolVar(&quietFlag, "quiet", false, "suppress all output except errors")
 	rootCmd.PersistentFlags().BoolVar(&debugFlag, "debug", false, "enable debug output")
 	rootCmd.PersistentFlags().BoolVar(&dryRunFlag, "dry-run", false, "show what would be done without doing it")
+	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "set log level (trace, debug, info, warn, error)")
 }
