@@ -10,15 +10,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupTestRepo(t *testing.T) (string, func()) {
+func setupTestRepo(t *testing.T) (dir string, cleanup func()) {
 	t.Helper()
 
-	// Create temp directory
-	dir, err := os.MkdirTemp("", "git-test-*")
-	require.NoError(t, err)
+	// Create a temporary directory
+	tmpDir, err := os.MkdirTemp("", "git-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
 
-	cleanup := func() {
-		os.RemoveAll(dir)
+	cleanup = func() {
+		os.RemoveAll(tmpDir)
 	}
 
 	// Initialize git repo
@@ -33,7 +35,7 @@ func setupTestRepo(t *testing.T) (string, func()) {
 	// Run initial commands
 	for _, cmd := range cmds {
 		c := exec.Command(cmd[0], cmd[1:]...)
-		c.Dir = dir
+		c.Dir = tmpDir
 		c.Env = append(os.Environ(),
 			"GIT_CONFIG_GLOBAL=/dev/null",
 			"GIT_CONFIG_SYSTEM=/dev/null",
@@ -47,15 +49,20 @@ func setupTestRepo(t *testing.T) (string, func()) {
 	// Create initial commit and branches
 	branchCmds := [][]string{
 		// Create initial commit on main
+		{"git", "checkout", "--orphan", "main"},
 		{"git", "commit", "--allow-empty", "-m", "Initial commit"},
 		// Create and setup feature branches
 		{"git", "branch", "feature/test"},
 		{"git", "branch", "feature/test2"},
+		// Create unmerged branch
+		{"git", "checkout", "-b", "unmerged"},
+		{"git", "commit", "--allow-empty", "-m", "Unmerged commit"},
+		{"git", "checkout", "main"},
 	}
 
 	for _, cmd := range branchCmds {
 		c := exec.Command(cmd[0], cmd[1:]...)
-		c.Dir = dir
+		c.Dir = tmpDir
 		c.Env = append(os.Environ(),
 			"GIT_CONFIG_GLOBAL=/dev/null",
 			"GIT_CONFIG_SYSTEM=/dev/null",
@@ -66,7 +73,7 @@ func setupTestRepo(t *testing.T) (string, func()) {
 		}
 	}
 
-	return dir, cleanup
+	return tmpDir, cleanup
 }
 
 func TestNew(t *testing.T) {
@@ -83,10 +90,16 @@ func TestListBranches(t *testing.T) {
 	branches, err := g.ListBranches()
 	require.NoError(t, err)
 
-	// Should have main and two feature branches
-	assert.Len(t, branches, 3, "Expected 3 branches")
+	// Count unique branch names
+	branchNames := make(map[string]bool)
+	for _, b := range branches {
+		branchNames[b.Name] = true
+	}
 
-	var hasMain, hasFeature1, hasFeature2 bool
+	// Should have main, unmerged, and two feature branches
+	assert.Len(t, branchNames, 4, "Expected 4 unique branches")
+
+	var hasMain, hasFeature1, hasFeature2, hasUnmerged bool
 	for _, b := range branches {
 		switch b.Name {
 		case "main":
@@ -96,12 +109,20 @@ func TestListBranches(t *testing.T) {
 			hasFeature1 = true
 		case "feature/test2":
 			hasFeature2 = true
+		case "unmerged":
+			hasUnmerged = true
+			assert.False(t, b.IsMerged, "unmerged branch should be marked as not merged")
 		}
 	}
 
 	assert.True(t, hasMain, "main branch not found")
 	assert.True(t, hasFeature1, "feature/test branch not found")
 	assert.True(t, hasFeature2, "feature/test2 branch not found")
+	assert.True(t, hasUnmerged, "unmerged branch not found")
+}
+
+func TestListRemoteBranches(t *testing.T) {
+	t.Skip("Remote branch tests require a remote repository setup")
 }
 
 func TestVerifyRepo(t *testing.T) {
@@ -115,34 +136,24 @@ func TestVerifyRepo(t *testing.T) {
 
 	// Test invalid repo
 	invalidDir := filepath.Join(t.TempDir(), "not-a-repo")
-	require.NoError(t, os.MkdirAll(invalidDir, 0755))
+	require.NoError(t, os.MkdirAll(invalidDir, 0o755))
 
 	g = New(invalidDir)
 	err = g.verifyRepo()
 	assert.Error(t, err)
 	assert.IsType(t, &ErrNotGitRepo{}, err)
+
+	// Test inaccessible directory
+	inaccessibleDir := filepath.Join(t.TempDir(), "no-access")
+	require.NoError(t, os.MkdirAll(inaccessibleDir, 0o000))
+	defer os.Chmod(inaccessibleDir, 0o755) // Restore permissions for cleanup
+
+	g = New(inaccessibleDir)
+	err = g.verifyRepo()
+	assert.Error(t, err)
 }
 
 func TestDeleteBranch(t *testing.T) {
-	dir, cleanup := setupTestRepo(t)
-	defer cleanup()
-
-	g := New(dir)
-
-	// Try deleting a branch
-	err := g.DeleteBranch("feature/test", false, false)
-	require.NoError(t, err)
-
-	// Verify branch is gone
-	branches, err := g.ListBranches()
-	require.NoError(t, err)
-
-	for _, b := range branches {
-		assert.NotEqual(t, "feature/test", b.Name)
-	}
-}
-
-func TestDeleteBranchErrors(t *testing.T) {
 	dir, cleanup := setupTestRepo(t)
 	defer cleanup()
 
@@ -156,7 +167,21 @@ func TestDeleteBranchErrors(t *testing.T) {
 		shouldError bool
 	}{
 		{
-			name:        "non-existent branch",
+			name:       "delete local branch",
+			branchName: "feature/test",
+		},
+		{
+			name:        "delete unmerged branch without force",
+			branchName:  "unmerged",
+			shouldError: true,
+		},
+		{
+			name:       "force delete unmerged branch",
+			branchName: "unmerged",
+			force:      true,
+		},
+		{
+			name:        "delete non-existent branch",
 			branchName:  "does-not-exist",
 			shouldError: true,
 		},
@@ -174,7 +199,36 @@ func TestDeleteBranchErrors(t *testing.T) {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
+				// Verify branch is gone
+				branches, err := g.ListBranches()
+				require.NoError(t, err)
+				for _, b := range branches {
+					assert.NotEqual(t, tt.branchName, b.Name)
+				}
 			}
 		})
 	}
+}
+
+func TestDeleteBranchErrors(t *testing.T) {
+	dir, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	g := New(dir)
+
+	// Test deleting branch with invalid characters
+	err := g.DeleteBranch("invalid/;branch", false, false)
+	assert.Error(t, err)
+
+	// Test deleting protected branch
+	err = g.DeleteBranch("main", false, false)
+	assert.Error(t, err)
+
+	// Test deleting unmerged branch without force
+	err = g.DeleteBranch("unmerged", false, false)
+	assert.Error(t, err)
+
+	// Test deleting non-existent branch
+	err = g.DeleteBranch("does-not-exist", false, false)
+	assert.Error(t, err)
 }

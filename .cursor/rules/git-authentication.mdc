@@ -1,6 +1,6 @@
 ---
 description: Git Authentication in Go
-globs: 
+globs: *.go
 alwaysApply: false
 ---
 ## Git Authentication in Go

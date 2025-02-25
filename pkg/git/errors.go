@@ -44,5 +44,33 @@ type ErrNotGitRepo struct {
 }
 
 func (e *ErrNotGitRepo) Error() string {
-	return fmt.Sprintf("not a git repository: %s", e.Dir)
+	return fmt.Sprintf("directory %s is not a git repository", e.Dir)
+}
+
+// ErrInvalidBranch indicates that the branch name is invalid
+type ErrInvalidBranch struct {
+	Branch string
+}
+
+func (e *ErrInvalidBranch) Error() string {
+	return fmt.Sprintf("invalid branch name: %s", e.Branch)
+}
+
+// ErrGitCommand indicates that a git command failed
+type ErrGitCommand struct {
+	Cmd    string
+	Output string
+}
+
+func (e *ErrGitCommand) Error() string {
+	return fmt.Sprintf("git command failed: %s\nOutput: %s", e.Cmd, e.Output)
+}
+
+// ErrTimeout indicates that a git operation timed out
+type ErrTimeout struct {
+	Operation string
+}
+
+func (e *ErrTimeout) Error() string {
+	return fmt.Sprintf("operation timed out: %s", e.Operation)
 }

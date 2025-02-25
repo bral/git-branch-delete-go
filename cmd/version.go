@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	Version   = "dev"
+	Version   = "v2.0.1"
 	CommitSHA = "none"
 	BuildTime = "unknown"
 )
@@ -19,7 +19,11 @@ func init() {
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the version number",
-	Run: func(cmd *cobra.Command, args []string) {
+	Long: `Print the version number of git-branch-delete.
+Shows the version, commit hash, build date, and Go version used to build the binary.`,
+	Example: `  git-branch-delete version
+  git-branch-delete version --short`,
+	Run: func(_ *cobra.Command, _ []string) {
 		fmt.Printf("Version: %s\nCommit: %s\nBuilt: %s\n", Version, CommitSHA, BuildTime)
 	},
 }

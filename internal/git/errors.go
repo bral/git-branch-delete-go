@@ -73,10 +73,10 @@ func newUnmergedBranchError(name string) error {
 	return &ErrUnmergedBranch{Name: name}
 }
 
-func newGitCommandError(cmd string, output string, err error) error {
-	return &ErrGitCommand{Command: cmd, Output: output, Err: err}
+func newGitCommandError(cmd, output string, err error) error {
+	return fmt.Errorf("git command '%s' failed: %s: %w", cmd, output, err)
 }
 
-func newTimeoutError(cmd string, timeout string) error {
-	return &ErrTimeout{Command: cmd, Timeout: timeout}
+func newTimeoutError(cmd, timeout string) error {
+	return fmt.Errorf("git command '%s' timed out after %s", cmd, timeout)
 }

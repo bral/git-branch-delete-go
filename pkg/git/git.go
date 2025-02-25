@@ -89,7 +89,7 @@ func (g *Git) ListBranches() ([]Branch, error) {
 	}
 
 	// Check for stale branches (non-fatal)
-	_ = g.markStaleBranches(branches)
+	g.markStaleBranches(branches)
 
 	return branches, nil
 }
@@ -198,7 +198,7 @@ func (g *Git) verifyRepo() error {
 	return nil
 }
 
-func (g *Git) markStaleBranches(branches []Branch) error {
+func (g *Git) markStaleBranches(branches []Branch) {
 	for i := range branches {
 		if branches[i].IsRemote {
 			continue
@@ -217,5 +217,4 @@ func (g *Git) markStaleBranches(branches []Branch) error {
 
 		branches[i].IsStale = strings.Contains(string(output), "gone")
 	}
-	return nil
 }

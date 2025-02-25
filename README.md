@@ -4,26 +4,25 @@ A powerful CLI tool for managing Git branches with features for safe deletion, i
 
 ## Features
 
-- 🔍 List local and remote branches with detailed status
-- 🗑️ Safely delete branches with protection for default branches
-- 🤝 Interactive mode for selecting multiple branches
+- 🔍 List local and remote branches with detailed status (commit hash, merge status)
+- 🗑️ Safely delete branches with protection for default branches (main, master, develop)
+- 🤝 Interactive mode with multi-select and keyboard navigation
 - 🧹 Prune stale and merged branches
 - 🎨 Color-coded output for better visibility
 - 🔒 Protected branches configuration
-- 🔄 Remote branch handling
+- 🔄 Remote branch handling with authentication support
+- 🚦 Dry-run mode for safety
 
 ## Installation
 
 ### Using Go
 
 ```bash
+# Install the latest version
 go install github.com/bral/git-branch-delete-go@latest
-```
 
-### Using Homebrew
-
-```bash
-brew install brannonlucas/tap/git-branch-delete
+# Install specific version
+go install github.com/bral/git-branch-delete-go@v2.0.1
 ```
 
 ### From Release
@@ -32,38 +31,69 @@ Download the latest release from the [releases page](https://github.com/bral/git
 
 ## Usage
 
-### List Branches
+### Basic Commands
 
 ```bash
-# List local branches
-git-branch-delete list
-
-# List remote branches
-git-branch-delete list --remote
-
-# List all branches
+# List all branches with status
 git-branch-delete list --all
+
+# Delete a single branch
+git-branch-delete delete feature/old-branch
+
+# Delete a remote branch
+git-branch-delete delete feature/old-branch --remote
+
+# Force delete an unmerged branch
+git-branch-delete delete feature/risky-branch --force
 ```
 
 ### Interactive Mode
 
+Interactive mode provides a user-friendly interface for managing multiple branches:
+
 ```bash
-# Select branches to delete interactively
+# Start interactive mode
 git-branch-delete interactive
-# or use the shorthand
-git-branch-delete i
+
+# Include remote branches
+git-branch-delete interactive --all
+
+# Force delete without merge checks
+git-branch-delete interactive --force
 ```
 
-### Prune Stale Branches
+Navigation:
+
+- Use ↑/↓ to move between branches
+- Space to select/deselect branches
+- Enter to confirm selection
+- q to quit without changes
+
+### Common Workflows
+
+#### Cleanup After Release
 
 ```bash
-# Show stale branches
+# 1. List stale branches
+git-branch-delete list --stale
+
+# 2. Prune remote branches
+git-branch-delete prune --remote
+
+# 3. Delete merged feature branches
+git-branch-delete interactive --merged
+```
+
+#### Safe Remote Cleanup
+
+```bash
+# 1. Show what would be deleted
 git-branch-delete prune --dry-run
 
-# Delete stale branches (with confirmation)
+# 2. Delete with confirmation
 git-branch-delete prune
 
-# Force delete stale branches
+# 3. Force delete if needed
 git-branch-delete prune --force
 ```
 
@@ -72,31 +102,34 @@ git-branch-delete prune --force
 Create `~/.config/git-branch-delete.yaml`:
 
 ```yaml
-# Override default branch detection
+# Default configuration
 default_branch: main
 
-# Protect specific branches from deletion
+# Protected branches
 protected_branches:
   - main
   - master
   - develop
 
-# Default remote (default: origin)
+# Default remote
 default_remote: origin
 
-# Skip confirmation prompts
+# Operation settings
 auto_confirm: false
-
-# Show what would be deleted without actually deleting
 dry_run: false
 ```
 
-Environment variables are also supported:
+### Environment Variables
 
-- `GBD_DEFAULT_BRANCH`
-- `GBD_DEFAULT_REMOTE`
-- `GBD_AUTO_CONFIRM`
-- `GBD_DRY_RUN`
+Core configuration:
+
+```bash
+# Core settings
+export GBD_DEFAULT_BRANCH=main
+export GBD_DEFAULT_REMOTE=origin
+export GBD_AUTO_CONFIRM=false
+export GBD_DRY_RUN=false
+```
 
 ### Shell Completion
 

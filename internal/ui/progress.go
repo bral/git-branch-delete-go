@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -105,10 +106,10 @@ func (fs *FuzzySearch) Match(text string) bool {
 }
 
 func levenshteinDistance(s1, s2 string) int {
-	if len(s1) == 0 {
+	if s1 == "" {
 		return len(s2)
 	}
-	if len(s2) == 0 {
+	if s2 == "" {
 		return len(s1)
 	}
 
@@ -132,7 +133,7 @@ func levenshteinDistance(s1, s2 string) int {
 			if s1[i-1] == s2[j-1] {
 				matrix[i][j] = matrix[i-1][j-1]
 			} else {
-				matrix[i][j] = min(
+				matrix[i][j] = minInt(
 					matrix[i-1][j]+1,   // deletion
 					matrix[i][j-1]+1,   // insertion
 					matrix[i-1][j-1]+1, // substitution
@@ -144,17 +145,15 @@ func levenshteinDistance(s1, s2 string) int {
 	return matrix[len(s1)][len(s2)]
 }
 
-func min(numbers ...int) int {
+func minInt(numbers ...int) int {
 	if len(numbers) == 0 {
 		return 0
 	}
-	min := numbers[0]
+	result := numbers[0]
 	for _, num := range numbers[1:] {
-		if num < min {
-			min = num
-		}
+		result = int(math.Min(float64(result), float64(num)))
 	}
-	return min
+	return result
 }
 
 func formatDuration(d time.Duration) string {

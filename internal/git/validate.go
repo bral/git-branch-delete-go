@@ -15,25 +15,20 @@ var (
 	// - Cannot contain: space, ~, ^, :, ?, *, [, \
 	// - Cannot end with '/'
 	// - Cannot end with '.lock'
-	// Using multiple regexes instead of negative lookahead
-	branchStartDotRegex = regexp.MustCompile(`^\.`)
-	doubleDotRegex     = regexp.MustCompile(`\.\.`)
-	endSlashRegex      = regexp.MustCompile(`/$`)
-	endLockRegex       = regexp.MustCompile(`\.lock$`)
 	// More restrictive valid chars regex
-	validCharsRegex    = regexp.MustCompile(`^[a-zA-Z0-9][-a-zA-Z0-9/_]+$`)
+	validCharsRegex = regexp.MustCompile(`^[a-zA-Z0-9][-a-zA-Z0-9/_]+$`)
 
 	// Consolidated git command validation
 	allowedGitCommands = map[string]bool{
 		// Core commands we use
-		"branch":        true,
+		"branch":       true,
 		"push":         true,
 		"rev-parse":    true,
 		"show-ref":     true,
 		"ls-remote":    true,
 		"for-each-ref": true,
-		"checkout":     true,  // For branch creation and switching
-		"commit":       true,  // For creating test commits
+		"checkout":     true, // For branch creation and switching
+		"commit":       true, // For creating test commits
 	}
 
 	// Allowed git flags with descriptions for security audit
@@ -47,31 +42,31 @@ var (
 		"--allow-empty": true, // Allow empty commits
 
 		// Branch listing and info
-		"-r":            true, // Remote branches
-		"--remotes":     true, // Remote branches (long form)
-		"--merged":      true, // List merged branches
-		"--no-merged":   true, // List unmerged branches
-		"--format":      true, // Custom format
-		"--abbrev-ref": true,  // Short ref names
-		"--verify":     true,  // Verify ref exists
-		"--quiet":      true,  // Suppress output
-		"--porcelain":  true,  // Machine-readable output
-		"-v":           true,  // Verbose
-		"-vv":          true,  // Very verbose
-		"--short":      true,  // Short SHA
+		"-r":           true, // Remote branches
+		"--remotes":    true, // Remote branches (long form)
+		"--merged":     true, // List merged branches
+		"--no-merged":  true, // List unmerged branches
+		"--format":     true, // Custom format
+		"--abbrev-ref": true, // Short ref names
+		"--verify":     true, // Verify ref exists
+		"--quiet":      true, // Suppress output
+		"--porcelain":  true, // Machine-readable output
+		"-v":           true, // Verbose
+		"-vv":          true, // Very verbose
+		"--short":      true, // Short SHA
 
 		// Remote operations
-		"origin":       true,  // Default remote name
-		"--progress":   true,  // Show progress
-		"--all":        true,  // All refs
+		"origin":     true, // Default remote name
+		"--progress": true, // Show progress
+		"--all":      true, // All refs
 
 		// Special refs
-		"HEAD":         true,  // Current HEAD
-		"refs/heads":   true,  // Local branches
-		"refs/remotes": true,  // Remote branches
+		"HEAD":         true, // Current HEAD
+		"refs/heads":   true, // Local branches
+		"refs/remotes": true, // Remote branches
 
 		// Git config
-		"-c":           true,  // Set config
+		"-c": true, // Set config
 	}
 
 	// Dangerous patterns that could be used for command injection
@@ -88,15 +83,26 @@ var (
 		"../", "..\\", ".\\", "\\", "./../", "/..",
 	}
 
-	// More restrictive branch name pattern
-	// - Must start with alphanumeric
-	// - Can contain alphanumeric, dash, underscore, forward slash
-	// - Cannot end with slash or dot
-	// - Maximum length enforced separately
+	// branchNamePattern matches valid branch names
 	branchNamePattern = regexp.MustCompile(`^[a-zA-Z0-9][-a-zA-Z0-9/_]*[a-zA-Z0-9]$`)
 )
 
-// ValidateGitArg validates a git command argument
+// ValidateGitArg validates a git command argument for security.
+//
+// Parameters:
+//   - arg: The argument to validate
+//
+// Returns an error if:
+//   - Argument contains shell metacharacters
+//   - Argument contains control characters
+//   - Argument contains path traversal sequences
+//
+// Example:
+//
+//	err := ValidateGitArg("feature/123")
+//	if err != nil {
+//	    log.Fatal("Invalid branch name:", err)
+//	}
 func ValidateGitArg(arg string) error {
 	// Allow empty arguments
 	if arg == "" {
@@ -131,7 +137,23 @@ func ValidateGitArg(arg string) error {
 	return fmt.Errorf("unsupported git argument: %s", arg)
 }
 
-// ValidateBranchName validates a git branch name
+// ValidateBranchName validates a git branch name.
+//
+// Parameters:
+//   - name: The branch name to validate
+//
+// Returns an error if:
+//   - Name contains invalid characters
+//   - Name starts or ends with '/'
+//   - Name contains '..' sequence
+//   - Name matches Git's reserved names
+//
+// Example:
+//
+//	err := ValidateBranchName("feature/new-branch")
+//	if err != nil {
+//	    log.Fatal("Invalid branch name:", err)
+//	}
 func ValidateBranchName(name string) error {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -145,7 +167,17 @@ func ValidateBranchName(name string) error {
 	return nil
 }
 
-// SanitizeBranchName removes any potentially dangerous characters from a branch name
+// SanitizeBranchName sanitizes a branch name for safe use.
+//
+// Parameters:
+//   - name: The branch name to sanitize
+//
+// Returns:
+//   - string: Sanitized branch name safe for git operations
+//
+// Example:
+//
+//	safeName := SanitizeBranchName("feature/my-branch")
 func SanitizeBranchName(name string) string {
 	// Remove any characters that could be used for command injection
 	for _, char := range dangerousPatterns {

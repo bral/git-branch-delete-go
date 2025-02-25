@@ -20,7 +20,7 @@ current_branch=$(git rev-parse --abbrev-ref HEAD)
 # Loop to create test branches
 for i in $(seq 1 $count); do
   # Generate a random branch name prefixed with "test_"
-  branch_name="test_$(tr -dc 'a-f0-9' </dev/urandom | head -c 8)"
+_$(tr -dc 'a-f0-9' </dev/urandom | head -c 8)"
 
   # Ensure the branch name is unique
   while git rev-parse --verify "$branch_name" >/dev/null 2>&1; do
