@@ -4,13 +4,13 @@ A powerful CLI tool for managing Git branches with features for safe deletion, i
 
 ## Features
 
-- 🔍 List local and remote branches with detailed status
-- 🗑️ Safely delete branches with protection for default branches
-- 🤝 Interactive mode for selecting multiple branches
+- 🔍 List local and remote branches with detailed status (commit hash, merge status)
+- 🗑️ Safely delete branches with protection for default branches (main, master, develop)
+- 🤝 Interactive mode with multi-select and keyboard navigation
 - 🧹 Prune stale and merged branches
 - 🎨 Color-coded output for better visibility
 - 🔒 Protected branches configuration
-- 🔄 Remote branch handling
+- 🔄 Remote branch handling with authentication support
 - 🚦 Dry-run mode for safety
 
 ## Installation
@@ -19,12 +19,6 @@ A powerful CLI tool for managing Git branches with features for safe deletion, i
 
 ```bash
 go install github.com/bral/git-branch-delete-go@latest
-```
-
-### Using Homebrew
-
-```bash
-brew install brannonlucas/tap/git-branch-delete
 ```
 
 ### From Release
@@ -57,11 +51,11 @@ Interactive mode provides a user-friendly interface for managing multiple branch
 # Start interactive mode
 git-branch-delete interactive
 
-# Start with remote branches
-git-branch-delete interactive --remote
+# Include remote branches
+git-branch-delete interactive --all
 
-# Start with specific filter
-git-branch-delete interactive --filter="feature/*"
+# Force delete without merge checks
+git-branch-delete interactive --force
 ```
 
 Navigation:
@@ -86,79 +80,44 @@ git-branch-delete prune --remote
 git-branch-delete interactive --merged
 ```
 
-#### Batch Delete Feature Branches
-
-```bash
-# 1. List all feature branches
-git-branch-delete list --filter="feature/*"
-
-# 2. Delete all merged feature branches
-git-branch-delete delete --pattern="feature/*" --merged
-
-# 3. Verify deletion
-git-branch-delete list --all
-```
-
 #### Safe Remote Cleanup
 
 ```bash
 # 1. Show what would be deleted
-git-branch-delete prune --dry-run --remote
+git-branch-delete prune --dry-run
 
 # 2. Delete with confirmation
-git-branch-delete prune --remote
+git-branch-delete prune
 
-# 3. Cleanup local references
-git-branch-delete prune --local
+# 3. Force delete if needed
+git-branch-delete prune --force
 ```
 
-### Advanced Configuration
+### Configuration
 
-The configuration file (`~/.config/git-branch-delete.yaml`) supports advanced options:
+Create `~/.config/git-branch-delete.yaml`:
 
 ```yaml
 # Default configuration
 default_branch: main
-default_remote: origin
 
-# Branch protection
+# Protected branches
 protected_branches:
   - main
   - master
   - develop
-  - release/*
-  - hotfix/*
 
-# Remote settings
-remotes:
-  - origin
-  - upstream
+# Default remote
+default_remote: origin
 
-# Deletion settings
-deletion:
-  auto_confirm: false
-  dry_run: false
-  force: false
-
-# Pattern settings
-patterns:
-  include:
-    - feature/*
-    - bugfix/*
-  exclude:
-    - release/*
-    - hotfix/*
-
-# UI settings
-ui:
-  color: true
-  interactive: true
-  progress: true
+# Operation settings
+auto_confirm: false
+dry_run: false
 ```
 
 ### Environment Variables
 
-Full list of supported environment variables:
+Core configuration:
 
 ```bash
 # Core settings
@@ -166,19 +125,6 @@ export GBD_DEFAULT_BRANCH=main
 export GBD_DEFAULT_REMOTE=origin
 export GBD_AUTO_CONFIRM=false
 export GBD_DRY_RUN=false
-
-# Authentication
-export GBD_GIT_USERNAME=your-username
-export GBD_CREDENTIAL_HELPER=osxkeychain
-
-# UI settings
-export GBD_COLOR=true
-export GBD_PROGRESS=true
-export GBD_INTERACTIVE=true
-
-# Logging
-export GBD_LOG_LEVEL=info
-export GBD_LOG_FILE=/path/to/log
 ```
 
 ### Shell Completion

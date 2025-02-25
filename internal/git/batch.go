@@ -18,16 +18,42 @@ type change struct {
 	rollback func() error
 }
 
+// BatchProcessor handles batch operations on git branches.
+// It provides concurrent processing with proper error handling.
 type BatchProcessor struct {
 	git *Git
 }
 
+// NewBatchProcessor creates a new BatchProcessor instance.
+//
+// Parameters:
+//   - g: Git instance to use for operations
+//
+// Returns:
+//   - *BatchProcessor: New processor instance
 func NewBatchProcessor(g *Git) *BatchProcessor {
 	return &BatchProcessor{
 		git: g,
 	}
 }
 
+// ProcessBranches processes multiple branches concurrently.
+//
+// Parameters:
+//   - ctx: Context for cancellation
+//   - branches: List of branches to process
+//   - fn: Function to apply to each branch
+//
+// Returns an error if:
+//   - Context is cancelled
+//   - Any branch operation fails
+//
+// Example:
+//
+//	processor := NewBatchProcessor(git)
+//	err := processor.ProcessBranches(ctx, branches, func(b GitBranch) error {
+//	    return git.DeleteBranch(b.Name, false, false)
+//	})
 func (bp *BatchProcessor) ProcessBranches(ctx context.Context, branches []GitBranch, fn func(GitBranch) error) error {
 	var wg sync.WaitGroup
 	errChan := make(chan error, len(branches))

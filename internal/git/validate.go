@@ -96,7 +96,22 @@ var (
 	branchNamePattern = regexp.MustCompile(`^[a-zA-Z0-9][-a-zA-Z0-9/_]*[a-zA-Z0-9]$`)
 )
 
-// ValidateGitArg validates a git command argument
+// ValidateGitArg validates a git command argument for security.
+//
+// Parameters:
+//   - arg: The argument to validate
+//
+// Returns an error if:
+//   - Argument contains shell metacharacters
+//   - Argument contains control characters
+//   - Argument contains path traversal sequences
+//
+// Example:
+//
+//	err := ValidateGitArg("feature/123")
+//	if err != nil {
+//	    log.Fatal("Invalid branch name:", err)
+//	}
 func ValidateGitArg(arg string) error {
 	// Allow empty arguments
 	if arg == "" {
@@ -131,7 +146,23 @@ func ValidateGitArg(arg string) error {
 	return fmt.Errorf("unsupported git argument: %s", arg)
 }
 
-// ValidateBranchName validates a git branch name
+// ValidateBranchName validates a git branch name.
+//
+// Parameters:
+//   - name: The branch name to validate
+//
+// Returns an error if:
+//   - Name contains invalid characters
+//   - Name starts or ends with '/'
+//   - Name contains '..' sequence
+//   - Name matches Git's reserved names
+//
+// Example:
+//
+//	err := ValidateBranchName("feature/new-branch")
+//	if err != nil {
+//	    log.Fatal("Invalid branch name:", err)
+//	}
 func ValidateBranchName(name string) error {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -145,7 +176,17 @@ func ValidateBranchName(name string) error {
 	return nil
 }
 
-// SanitizeBranchName removes any potentially dangerous characters from a branch name
+// SanitizeBranchName sanitizes a branch name for safe use.
+//
+// Parameters:
+//   - name: The branch name to sanitize
+//
+// Returns:
+//   - string: Sanitized branch name safe for git operations
+//
+// Example:
+//
+//	safeName := SanitizeBranchName("feature/my-branch")
 func SanitizeBranchName(name string) string {
 	// Remove any characters that could be used for command injection
 	for _, char := range dangerousPatterns {

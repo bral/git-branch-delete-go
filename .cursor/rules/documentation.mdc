@@ -1,0 +1,137 @@
+---
+description: Go Project Documentation
+globs: *.go, *.md, *.yaml, *.toml, *.json
+alwaysApply: false
+---
+# Documentation Rules
+
+## Core Rules
+
+1. Code Documentation
+   ```go
+   // FunctionName performs a specific task.
+   //
+   // Parameters:
+   //   - param1: description
+   //   - param2: description
+   //
+   // Returns:
+   //   - returnType: description
+   //
+   // Returns an error if:
+   //   - condition1
+   //   - condition2
+   //
+   // Example:
+   //   result, err := FunctionName("param")
+   //   if err != nil {
+   //       log.Fatal(err)
+   //   }
+   ```
+   - All exported types and functions MUST have godoc comments
+   - All cobra commands MUST have Short, Long, and Example documentation
+   - All configuration options MUST have type and usage documentation
+
+2. README Maintenance
+   - Features list MUST match implementation exactly
+   - Command examples MUST be tested and working
+   - Installation instructions MUST be current
+   - Configuration examples MUST be valid
+   - Version compatibility MUST be clearly stated
+   - Dependencies MUST be listed with version requirements
+   - Breaking changes MUST be marked with a `// Deprecated:` comment
+   - Examples MUST be included for non-obvious functionality
+
+3. Change Tracking
+   - CHANGELOG.md MUST follow Keep a Changelog format
+   - All public API changes MUST be documented
+   - Breaking changes MUST be clearly marked
+   - Security updates MUST be highlighted
+   - Version numbers MUST follow SemVer
+   - Each release MUST have a date
+
+## Pre-Commit Checklist
+
+- [ ] Godoc comments added/updated for new/modified code
+- [ ] README examples tested and working
+- [ ] Configuration examples validated
+- [ ] CHANGELOG.md updated if applicable
+- [ ] Command help text reviewed
+- [ ] No TODOs or FIXMEs in documentation
+- [ ] Breaking changes marked with deprecation notices
+- [ ] Version numbers updated if needed
+- [ ] API documentation is current
+- [ ] Examples are tested and working
+
+## Documentation Locations
+
+1. Code Documentation
+   - Godoc comments in .go files
+   - Command documentation in cmd/*.go
+   - Package documentation in doc.go files
+   - API documentation in api/*.go
+
+
+2. Project Documentation
+   - README.md: Overview and quick start
+   - CHANGELOG.md: Version history
+   - docs/: Detailed documentation
+     - docs/api/: API documentation
+     - docs/examples/: Usage examples
+     - docs/contributing/: Contribution guidelines
+   - .github/: Community guidelines
+
+## File Patterns
+
+This rule applies to:
+```
+*.go
+*.md
+docs/*
+.github/*
+*.yaml
+*.toml
+```
+
+## Validation Commands
+
+```bash
+# Verify godoc formatting and examples
+go doc ./...
+go test -v -run=Example ./...
+
+# Lint documentation
+golangci-lint run --enable godot,godox
+
+# Test README examples (add to Makefile)
+.PHONY: test-docs
+test-docs:
+    @echo "Testing documentation examples..."
+    @for f in $(shell find . -name "*.md"); do \
+        grep -E '^```(bash|go)' $$f -A 1 | \
+        while read -r line; do \
+            if [[ $$line =~ ^```(bash|go) ]]; then \
+                read -r cmd; \
+                echo "Testing $$cmd"; \
+                eval "$$cmd" || exit 1; \
+            fi \
+        done \
+    done
+
+# Validate config
+go run ./cmd/validate-config  # Implement this command
+```
+
+## Version Management
+
+1. Version Numbers
+   - MUST follow SemVer (MAJOR.MINOR.PATCH)
+   - MAJOR version increments for breaking changes
+   - MINOR version increments for new features
+   - PATCH version increments for bug fixes
+
+2. Breaking Changes
+   - MUST be documented in CHANGELOG.md
+   - MUST include migration instructions
+   - MUST have deprecation notices in code
+   - MUST be mentioned in release notes 
