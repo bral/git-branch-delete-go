@@ -1,0 +1,55 @@
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/bral/git-branch-delete-go/cmd.Version={{.Version}}
+      - -X github.com/bral/git-branch-delete-go/cmd.CommitSHA={{.Commit}}
+      - -X github.com/bral/git-branch-delete-go/cmd.BuildTime={{.Date}}
+
+archives:
+  - format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+
+brews:
+  - name: git-branch-delete
+    homepage: "https://github.com/bral/git-branch-delete-go"
+    description: "A tool to manage git branch deletion"
+    tap:
+      owner: bral
+      name: homebrew-tap
+    install: |
+      bin.install "git-branch-delete"

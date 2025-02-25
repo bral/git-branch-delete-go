@@ -1,0 +1,7 @@
+default_branch: main
+protected_branches:
+  - main
+  - master
+  - develop
+default_remote: origin
+auto_confirm: false

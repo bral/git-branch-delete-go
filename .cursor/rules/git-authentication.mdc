@@ -1,0 +1,64 @@
+---
+description: Git Authentication in Go
+globs: 
+alwaysApply: false
+---
+## Git Authentication in Go
+
+When executing Git commands in Go that may require authentication:
+
+1. Always pass through stdin/stdout/stderr to allow interactive auth:
+```go
+cmd.Stdin = os.Stdin
+cmd.Stdout = os.Stdout // or buffer if needed
+cmd.Stderr = os.Stderr // or buffer if needed
+```
+
+2. Allow these environment variables for auth to work:
+```go
+allowedEnvPrefixes := map[string]bool{
+    "HOME=":            true,
+    "USER=":           true,
+    "PATH=":           true,
+    "SSH_AUTH_SOCK=":  true,
+    "SSH_AGENT_PID=":  true,
+    "DISPLAY=":        true,
+    "TERM=":           true,
+    "LANG=":           true,
+    "LC_ALL=":         true,
+    "XDG_CONFIG_HOME=": true,
+    "XDG_CACHE_HOME=":  true,
+}
+
+allowedGitVars := map[string]bool{
+    "GIT_TERMINAL_PROMPT": true,
+    "GIT_ASKPASS":        true,
+    "GIT_SSH":            true,
+    "GIT_SSH_COMMAND":    true,
+    "GIT_CREDENTIAL_HELPER": true,
+}
+```
+
+3. Set minimal Git environment variables:
+```go
+gitEnv := []string{
+    "GIT_TERMINAL_PROMPT=1",
+    "GIT_PROTOCOL=version=2",
+    "LC_ALL=C",
+}
+```
+
+4. Don't override or disable system Git config:
+- Avoid setting `GIT_CONFIG_NOSYSTEM=1`
+- Don't force any credential helpers
+- Let Git use system's existing auth mechanisms
+
+5. For timeout handling:
+- Use context with reasonable timeout
+- Ensure timeout doesn't interrupt credential prompts
+- Default timeout should be at least 30 seconds
+
+6. Error handling:
+- Check for auth-specific errors: "Authentication failed", "could not read Username", "Permission denied"
+- Provide clear guidance based on URL type (HTTPS vs SSH)
+- Don't attempt to manage credentials, direct users to system Git config
